@@ -1,0 +1,15 @@
+/* Proximity full-width app reset */
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  text-align: initial;
+}
+
+.logo,
+.card,
+.read-the-docs {
+  display: none;
+}

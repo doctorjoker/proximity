@@ -1,0 +1,112 @@
+services:
+  proximity-postgres:
+    image: postgres:16
+    container_name: proximity-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    ports:
+      - "5434:5432"
+    networks:
+      - proximity_net
+
+  genieacs-mongo:
+    image: mongo:4.4
+    container_name: genieacs-mongo
+    restart: unless-stopped
+    volumes:
+      - ./data/genieacs/mongo:/data/db
+    networks:
+      proximity_net:
+        aliases:
+          - genieacs-mongo
+
+  genieacs-cwmp:
+    build:
+      context: ./docker/genieacs
+    container_name: genieacs-cwmp
+    restart: unless-stopped
+    depends_on:
+      - genieacs-mongo
+    environment:
+      GENIEACS_MONGODB_CONNECTION_URL: ${GENIEACS_MONGO_URL}
+      GENIEACS_CWMP_INTERFACE: 0.0.0.0
+      GENIEACS_CWMP_PORT: 7547
+      GENIEACS_CWMP_ACCESS_LOG_FILE: /var/log/genieacs/genieacs-cwmp-access.log
+    command: ["genieacs-cwmp"]
+    ports:
+      - "7547:7547"
+    volumes:
+      - ./data/genieacs/logs:/var/log/genieacs
+    networks:
+      - proximity_net
+
+  genieacs-nbi:
+    build:
+      context: ./docker/genieacs
+    container_name: genieacs-nbi
+    restart: unless-stopped
+    depends_on:
+      - genieacs-mongo
+    environment:
+      GENIEACS_MONGODB_CONNECTION_URL: ${GENIEACS_MONGO_URL}
+      GENIEACS_NBI_INTERFACE: 0.0.0.0
+      GENIEACS_NBI_PORT: 7557
+      GENIEACS_NBI_ACCESS_LOG_FILE: /var/log/genieacs/genieacs-nbi-access.log
+    command: ["genieacs-nbi"]
+    ports:
+      - "7557:7557"
+    volumes:
+      - ./data/genieacs/logs:/var/log/genieacs
+    networks:
+      - proximity_net
+
+  genieacs-fs:
+    build:
+      context: ./docker/genieacs
+    container_name: genieacs-fs
+    restart: unless-stopped
+    depends_on:
+      - genieacs-mongo
+    environment:
+      GENIEACS_MONGODB_CONNECTION_URL: ${GENIEACS_MONGO_URL}
+      GENIEACS_FS_INTERFACE: 0.0.0.0
+      GENIEACS_FS_PORT: 7567
+      GENIEACS_FS_ACCESS_LOG_FILE: /var/log/genieacs/genieacs-fs-access.log
+    command: ["genieacs-fs"]
+    ports:
+      - "7567:7567"
+    volumes:
+      - ./data/genieacs/logs:/var/log/genieacs
+    networks:
+      - proximity_net
+
+  genieacs-ui:
+    build:
+      context: ./docker/genieacs
+    container_name: genieacs-ui
+    restart: unless-stopped
+    depends_on:
+      - genieacs-mongo
+      - genieacs-nbi
+    environment:
+      GENIEACS_MONGODB_CONNECTION_URL: ${GENIEACS_MONGO_URL}
+      GENIEACS_UI_INTERFACE: 0.0.0.0
+      GENIEACS_UI_PORT: 3000
+      GENIEACS_UI_JWT_SECRET: ChangeMeGenieUiJwtSecret
+      GENIEACS_UI_ACCESS_LOG_FILE: /var/log/genieacs/genieacs-ui-access.log
+    command: ["genieacs-ui"]
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data/genieacs/logs:/var/log/genieacs
+    networks:
+      - proximity_net
+
+networks:
+  proximity_net:
+    name: proximity_net
