@@ -8,6 +8,46 @@ class GenieACSClient:
     def __init__(self, base_url: str = None):
         self.base_url = (base_url or settings.genieacs_nbi_url).rstrip("/")
 
+    async def set_pppoe_credentials(self, acs_device_id: str, username: str, password: str):
+        return await self.create_task(
+            acs_device_id,
+            {
+                "name": "setParameterValues",
+                "parameterValues": [
+                    [
+                        "Device.PPP.Interface.1.Username",
+                        username,
+                        "xsd:string",
+                    ],
+                    [
+                        "Device.PPP.Interface.1.Password",
+                        password,
+                        "xsd:string",
+                    ],
+                ],
+            },
+        )
+
+    async def verify_pppoe_credentials(self, acs_device_id: str):
+        device = await self.get_device_raw(acs_device_id)
+
+        if not device:
+            return None
+
+        username = None
+
+        try:
+            username = (
+                device["Device"]["PPP"]["Interface"]["1"]
+                ["Username"]["_value"]
+            )
+        except Exception:
+            pass
+
+        return {
+            "username": username
+        }
+
     async def get_devices(self):
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(f"{self.base_url}/devices")

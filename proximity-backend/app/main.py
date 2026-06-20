@@ -42,6 +42,8 @@ from app.routers.customer360 import router as customer360_router
 
 from app.routers.proactive_care import router as proactive_care_router
 
+from app.modules.provisioning.router import router as provisioning_router
+
 app = FastAPI(
     title=settings.app_name,
     version="6.0.0-foundation",
@@ -94,6 +96,8 @@ app.include_router(device_intelligence_router)
 app.include_router(customer360_router)
 
 app.include_router(proactive_care_router)
+
+app.include_router(provisioning_router)
 
 @app.get("/health")
 async def health():
