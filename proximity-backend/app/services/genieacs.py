@@ -28,6 +28,33 @@ class GenieACSClient:
             },
         )
 
+
+    async def set_tplink_wan_pppoe_credentials(
+        self,
+        acs_device_id: str,
+        username: str,
+        password: str,
+        wan_device: str = "1",
+        wan_connection_device: str = "4",
+        wan_ppp_connection: str = "1",
+    ):
+        base = (
+            f"InternetGatewayDevice.WANDevice.{wan_device}."
+            f"WANConnectionDevice.{wan_connection_device}."
+            f"WANPPPConnection.{wan_ppp_connection}"
+        )
+
+        return await self.create_task(
+            acs_device_id,
+            {
+                "name": "setParameterValues",
+                "parameterValues": [
+                    [f"{base}.Username", username, "xsd:string"],
+                    [f"{base}.Password", password, "xsd:string"],
+                ],
+            },
+        )
+
     async def verify_pppoe_credentials(self, acs_device_id: str):
         device = await self.get_device_raw(acs_device_id)
 

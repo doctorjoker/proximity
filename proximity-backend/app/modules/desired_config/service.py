@@ -35,7 +35,7 @@ async def restore_service_configuration(
 
         if config_type == "PPPOE":
 
-            task = await genieacs_client.set_pppoe_credentials(
+            task = await genieacs_client.set_tplink_wan_pppoe_credentials(
                 acs_device_id,
                 data["username"],
                 data["password"]
