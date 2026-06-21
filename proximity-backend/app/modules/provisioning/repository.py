@@ -218,3 +218,16 @@ def update_provisioning_job_state(job_code: str, state: str, result: dict = None
                 job_code
             ))
             return cur.fetchone()
+
+
+def get_suspended_portal_profile(profile_code: str = "SPEEDNET_DEFAULT"):
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT *
+                FROM suspended_portal_profiles
+                WHERE profile_code = %s
+                  AND active = true
+                LIMIT 1
+            """, (profile_code,))
+            return cur.fetchone()

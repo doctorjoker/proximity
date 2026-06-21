@@ -14,6 +14,7 @@ from .repository import (
     bind_device_to_service,
     get_device_binding,
     update_provisioning_job_state,
+    get_suspended_portal_profile,
 )
 
 router = APIRouter(prefix="/api/v1/customer-services", tags=["Customer Services"])
@@ -250,12 +251,14 @@ async def api_wfm_service_order(payload: WFMProvisionRequest):
             provisioning["state"] = "PROVISIONED"
 
     elif binding and service["provisioning_profile"] == "INTERNET_SUSPENDED":
-        provisioning = {
-            "state": "SUSPENDED_PROFILE_PENDING",
-            "profile": "INTERNET_SUSPENDED",
-            "message": "Service is suspended. PPPoE customer provisioning skipped until suspended portal profile is implemented."
-        }
+        portal_profile = get_suspended_portal_profile()
 
+        provisioning = {
+            "state": "SUSPENDED_PROFILE_READY",
+            "profile": "INTERNET_SUSPENDED",
+            "portal_profile": portal_profile,
+            "message": "Service is suspended. Customer should be placed into walled garden / suspended portal profile."
+        }
     elif binding and not service["provisioning_allowed"]:
         provisioning = {
             "state": "SKIPPED_NOT_AUTHORIZED",
