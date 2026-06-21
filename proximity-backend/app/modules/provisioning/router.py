@@ -1,5 +1,10 @@
 from fastapi import APIRouter, HTTPException
-from .schemas import CustomerServiceCreate, ProvisionRequest, DeviceBindingCreate
+from .schemas import (
+    CustomerServiceCreate,
+    ProvisionRequest,
+    DeviceBindingCreate,
+    WFMProvisionRequest,
+)
 from app.services.genieacs import genieacs_client
 from .repository import (
     list_customer_services,
@@ -145,4 +150,104 @@ async def api_verify_customer_service(service_code: str):
         "expected_username": expected_username,
         "actual_username": actual_username,
         "match": match
+    }
+
+@router.post("/wfm/service-order")
+async def api_wfm_service_order(payload: WFMProvisionRequest):
+
+    service_code = f"WFM-{payload.service_order_code}"
+
+    service = create_customer_service(
+        CustomerServiceCreate(
+            service_code=service_code,
+            customer_id=payload.customer_id,
+            customer_name=payload.customer_name,
+            service_type=payload.service_type,
+            access_type=payload.access_type,
+            plan_name=payload.plan_name,
+            status="ACTIVE",
+            pppoe_username=payload.pppoe_username,
+            pppoe_password=payload.pppoe_password,
+            vlan=payload.vlan,
+            source_system="NOVASPACE",
+            source_order_code=payload.service_order_code,
+        )
+    )
+
+    binding = None
+
+    if payload.acs_device_id:
+        binding = bind_device_to_service(
+            service_code,
+            DeviceBindingCreate(
+                acs_device_id=payload.acs_device_id,
+                serial_number=payload.ont_serial,
+                vendor="AUTO",
+                model="AUTO",
+            )
+        )
+    provisioning = None
+
+    if (
+        binding
+        and payload.pppoe_username
+        and payload.pppoe_password
+    ):
+        job = create_provisioning_job(
+            service_code,
+            "NOVASPACE_WFM"
+        )
+
+        acs_task = await genieacs_client.set_pppoe_credentials(
+            payload.acs_device_id,
+            payload.pppoe_username,
+            payload.pppoe_password,
+        )
+
+        job = update_provisioning_job_state(
+            job["job_code"],
+            "ACS_TASK_CREATED",
+            {
+                "acs_device_id": payload.acs_device_id,
+                "acs_task": acs_task,
+            },
+        )
+
+        provisioning = {
+            "job_code": job["job_code"],
+            "state": job["state"],
+            "acs_task": acs_task,
+        }
+
+        verification = await genieacs_client.verify_pppoe_credentials(
+            payload.acs_device_id
+        )
+
+        actual_username = verification.get("username")
+        expected_username = payload.pppoe_username
+
+        provisioning["verification"] = {
+            "expected_username": expected_username,
+            "actual_username": actual_username,
+            "match": expected_username == actual_username,
+        }
+
+        if expected_username == actual_username:
+            job = update_provisioning_job_state(
+                job["job_code"],
+                "PROVISIONED",
+                {
+                    "acs_device_id": payload.acs_device_id,
+                    "acs_task": acs_task,
+                    "verification": provisioning["verification"],
+                },
+            )
+
+            provisioning["state"] = "PROVISIONED"
+    return {
+        "success": True,
+        "service_code": service_code,
+        "customer_service": service,
+        "binding": binding,
+        "provisioning": provisioning
     }
