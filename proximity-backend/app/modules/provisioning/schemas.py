@@ -15,7 +15,13 @@ class CustomerServiceCreate(BaseModel):
     vlan: Optional[int] = None
     source_system: str = "WFM"
     source_order_code: Optional[str] = None
+    commercial_status: str = "ACTIVE"
+    provisioning_profile: str = "INTERNET_FULL"
+    provisioning_allowed: bool = True
 
+    authority_source: str = "LOCAL"
+    authority_status: str = "ACTIVE"
+    authority_checked_at: Optional[str] = None
 
 class ProvisionRequest(BaseModel):
     requested_by: str = "BACKOFFICE"
@@ -41,3 +47,6 @@ class WFMProvisionRequest(BaseModel):
     vlan: int | None = None
     ont_serial: str | None = None
     acs_device_id: str | None = None
+    commercial_status: str = "ACTIVE"
+    authority_source: str = "LOCAL"
+    authority_status: str = "ACTIVE"

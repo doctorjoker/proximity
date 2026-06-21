@@ -39,6 +39,21 @@ def get_customer_service(service_code: str):
 def create_customer_service(data):
     payload = data.dict()
 
+    commercial_status = payload.get("commercial_status", "ACTIVE")
+    authority_status = payload.get("authority_status", commercial_status)
+
+    if commercial_status in ("ACTIVE", "PRO", "VALID") and authority_status in ("ACTIVE", "PRO", "VALID"):
+        payload["provisioning_profile"] = "INTERNET_FULL"
+        payload["provisioning_allowed"] = True
+    elif commercial_status in ("SUSPENDED", "BLOCKED") or authority_status in ("SUSPENDED", "BLOCKED"):
+        payload["provisioning_profile"] = "INTERNET_SUSPENDED"
+        payload["provisioning_allowed"] = True
+    else:
+        payload["provisioning_profile"] = "NO_PROVISIONING"
+        payload["provisioning_allowed"] = False
+
+    payload["authority_checked_at"] = None
+
     with get_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
@@ -54,7 +69,13 @@ def create_customer_service(data):
                     pppoe_password,
                     vlan,
                     source_system,
-                    source_order_code
+                    source_order_code,
+                    commercial_status,
+                    provisioning_profile,
+                    provisioning_allowed,
+                    authority_source,
+                    authority_status,
+                    authority_checked_at
                 )
                 VALUES (
                     %(service_code)s,
@@ -68,7 +89,13 @@ def create_customer_service(data):
                     %(pppoe_password)s,
                     %(vlan)s,
                     %(source_system)s,
-                    %(source_order_code)s
+                    %(source_order_code)s,
+                    %(commercial_status)s,
+                    %(provisioning_profile)s,
+                    %(provisioning_allowed)s,
+                    %(authority_source)s,
+                    %(authority_status)s,
+                    %(authority_checked_at)s
                 )
                 ON CONFLICT (service_code)
                 DO UPDATE SET
@@ -83,11 +110,16 @@ def create_customer_service(data):
                     vlan = EXCLUDED.vlan,
                     source_system = EXCLUDED.source_system,
                     source_order_code = EXCLUDED.source_order_code,
+                    commercial_status = EXCLUDED.commercial_status,
+                    provisioning_profile = EXCLUDED.provisioning_profile,
+                    provisioning_allowed = EXCLUDED.provisioning_allowed,
+                    authority_source = EXCLUDED.authority_source,
+                    authority_status = EXCLUDED.authority_status,
+                    authority_checked_at = EXCLUDED.authority_checked_at,
                     updated_at = now()
                 RETURNING *
             """, payload)
             return cur.fetchone()
-
 
 def create_provisioning_job(service_code: str, requested_by: str):
     with get_conn() as conn:

@@ -171,6 +171,9 @@ async def api_wfm_service_order(payload: WFMProvisionRequest):
             vlan=payload.vlan,
             source_system="NOVASPACE",
             source_order_code=payload.service_order_code,
+            commercial_status=payload.commercial_status,
+            authority_source=payload.authority_source,
+            authority_status=payload.authority_status,
         )
     )
 
@@ -192,6 +195,7 @@ async def api_wfm_service_order(payload: WFMProvisionRequest):
         binding
         and payload.pppoe_username
         and payload.pppoe_password
+        and service["provisioning_profile"] == "INTERNET_FULL"
     ):
         job = create_provisioning_job(
             service_code,
@@ -244,6 +248,21 @@ async def api_wfm_service_order(payload: WFMProvisionRequest):
             )
 
             provisioning["state"] = "PROVISIONED"
+
+    elif binding and service["provisioning_profile"] == "INTERNET_SUSPENDED":
+        provisioning = {
+            "state": "SUSPENDED_PROFILE_PENDING",
+            "profile": "INTERNET_SUSPENDED",
+            "message": "Service is suspended. PPPoE customer provisioning skipped until suspended portal profile is implemented."
+        }
+
+    elif binding and not service["provisioning_allowed"]:
+        provisioning = {
+            "state": "SKIPPED_NOT_AUTHORIZED",
+            "profile": service["provisioning_profile"],
+            "message": "Provisioning not allowed by authority status."
+        }
+
     return {
         "success": True,
         "service_code": service_code,
