@@ -127,5 +127,26 @@ class GenieACSClient:
 
             return data[0]
 
+    async def set_tplink_wifi_credentials(
+        self,
+        acs_device_id: str,
+        ssid_24: str,
+        password_24: str,
+        ssid_5: str,
+        password_5: str,
+    ):
+        return await self.create_task(
+            acs_device_id,
+            {
+                "name": "setParameterValues",
+                "parameterValues": [
+                    ["InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.SSID", ssid_24, "xsd:string"],
+                    ["InternetGatewayDevice.LANDevice.1.WLANConfiguration.1.PreSharedKey.1.KeyPassphrase", password_24, "xsd:string"],
+                    ["InternetGatewayDevice.LANDevice.1.WLANConfiguration.3.SSID", ssid_5, "xsd:string"],
+                    ["InternetGatewayDevice.LANDevice.1.WLANConfiguration.3.PreSharedKey.1.KeyPassphrase", password_5, "xsd:string"],
+                ],
+            },
+        )
+
 
 genieacs_client = GenieACSClient()

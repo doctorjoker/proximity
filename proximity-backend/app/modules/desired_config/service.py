@@ -33,6 +33,7 @@ async def restore_service_configuration(
         config_type = cfg["config_type"]
         data = cfg["configuration"]
 
+
         if config_type == "PPPOE":
 
             task = await genieacs_client.set_tplink_wan_pppoe_credentials(
@@ -44,6 +45,29 @@ async def restore_service_configuration(
             result["actions"].append({
                 "type": "PPPOE",
                 "task": task
+            })
+
+        elif config_type == "WIFI":
+
+            if not data.get("restore_allowed", True):
+                result["actions"].append({
+                    "type": "WIFI",
+                    "skipped": True,
+                    "reason": "RESTORE_NOT_ALLOWED",
+                })
+                continue
+
+            task = await genieacs_client.set_tplink_wifi_credentials(
+                acs_device_id,
+                data["ssid_24"],
+                data["password_24"],
+                data["ssid_5"],
+                data["password_5"],
+            )
+
+            result["actions"].append({
+                "type": "WIFI",
+                "task": task,
             })
 
     return result
