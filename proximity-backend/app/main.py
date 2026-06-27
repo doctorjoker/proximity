@@ -50,6 +50,8 @@ from app.modules.desired_config.router import router as desired_config_router
 
 from app.modules.device_authority.router import router as device_authority_router
 
+from app.modules.customer_services.router import router as customer_services_router
+
 app = FastAPI(
     title=settings.app_name,
     version="6.0.0-foundation",
@@ -110,6 +112,8 @@ app.include_router(activation_router)
 app.include_router(desired_config_router)
 
 app.include_router(device_authority_router)
+
+app.include_router(customer_services_router)
 
 @app.get("/health")
 async def health():

@@ -70,4 +70,21 @@ async def restore_service_configuration(
                 "task": task,
             })
 
+        elif config_type == "VOIP":
+
+            task = await genieacs_client.set_tplink_voip_credentials(
+                acs_device_id,
+                data["number"],
+                data["username"],
+                data["password"],
+                data["registrar"],
+                data.get("registrar_port", 5160),
+                data.get("isp_name", "Other provider"),
+            )
+
+            result["actions"].append({
+                "type": "VOIP",
+                "task": task,
+            })
+
     return result

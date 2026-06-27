@@ -87,6 +87,7 @@ class GenieACSClient:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
                 f"{self.base_url}/devices/{encoded_device_id}/tasks",
+                params={"connection_request": ""},
                 json=task,
             )
             response.raise_for_status()
@@ -148,5 +149,42 @@ class GenieACSClient:
             },
         )
 
+    async def set_tplink_voip_credentials(
+        self,
+        acs_device_id: str,
+        number: str,
+        username: str,
+        password: str,
+        registrar: str,
+        registrar_port: int = 5160,
+        isp_name: str = "Other provider",
+    ):
+        return await self.create_task(
+            acs_device_id,
+            {
+                "name": "setParameterValues",
+                "parameterValues": [
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiAccountEnable", 1, "xsd:unsignedInt"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiIspName", isp_name, "xsd:string"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiProfileName", number, "xsd:string"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiAuthUserName", username, "xsd:string"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiAuthPassword", password, "xsd:string"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiDisplayName", number, "xsd:string"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiExtension", number, "xsd:string"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiVoipNum", number, "xsd:string"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiDomain", "", "xsd:string"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiRegistrarServer", registrar, "xsd:string"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiRegistrarServerPort", registrar_port, "xsd:unsignedInt"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiProxyServer", "0.0.0.0", "xsd:string"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiProxyServerPort", 5060, "xsd:unsignedInt"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiOutboundProxy", "0.0.0.0", "xsd:string"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiOutboundProxyPort", 5060, "xsd:unsignedInt"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiUserAgentPort", registrar_port, "xsd:unsignedInt"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiRegisterViaOB", 0, "xsd:int"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiAccountInRoute", 0, "xsd:unsignedInt"],
+                    ["Device.X_TP_Services.X_TP_VoiceService.1.VoiceProfile.1.MultiIsp.1.MultiAccountPrior", 1, "xsd:unsignedInt"],
+                ],
+            },
+        )
 
 genieacs_client = GenieACSClient()
