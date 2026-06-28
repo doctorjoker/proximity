@@ -39,3 +39,28 @@ def get_assigned_device(service_code: str, acs_device_id: str):
                 acs_device_id
             ))
             return cur.fetchone()
+
+def replace_assigned_device(
+    service_code: str,
+    old_acs_device_id: str,
+    new_acs_device_id: str,
+):
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                UPDATE customer_assigned_devices
+                SET
+                    acs_device_id=%s,
+                    assignment_status='ASSIGNED',
+                    provisioning_allowed=true,
+                    updated_at=now()
+                WHERE service_code=%s
+                AND acs_device_id=%s
+                RETURNING *
+            """, (
+                new_acs_device_id,
+                service_code,
+                old_acs_device_id,
+            ))
+
+            return cur.fetchone()

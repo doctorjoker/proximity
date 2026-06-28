@@ -20,15 +20,18 @@ async def restore_customer_service_configuration(
 
     for action in actions:
         action_type = action.get("type")
+        task = action.get("task") or {}
+
+        task_failed = task.get("success") is False
 
         if action_type == "PPPOE":
-            summary["pppoe"] = "OK"
+            summary["pppoe"] = "FAILED" if task_failed else "OK"
 
         elif action_type == "WIFI":
-            summary["wifi"] = "OK"
+            summary["wifi"] = "FAILED" if task_failed else "OK"
 
         elif action_type == "VOIP":
-            summary["voip"] = "OK"
+            summary["voip"] = "FAILED" if task_failed else "OK"
 
     if restore.get("authorized") is False:
         return {
@@ -41,9 +44,15 @@ async def restore_customer_service_configuration(
             "restore": restore,
         }
 
-    restored_count = sum(1 for value in summary.values() if value == "OK")
+    ok_count = sum(1 for value in summary.values() if value == "OK")
+    failed_count = sum(1 for value in summary.values() if value == "FAILED")
 
-    state = "RESTORED" if restored_count > 0 else "NO_CONFIGURATION"
+    if failed_count > 0:
+        state = "RESTORE_FAILED"
+    elif ok_count > 0:
+        state = "RESTORED"
+    else:
+        state = "NO_CONFIGURATION"
 
     return {
         "success": True,

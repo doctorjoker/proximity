@@ -90,9 +90,28 @@ class GenieACSClient:
                 params={"connection_request": ""},
                 json=task,
             )
-            response.raise_for_status()
-            return response.json() if response.text else {"success": True}
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                status_code = exc.response.status_code
 
+                if status_code == 404:
+                    return {
+                        "success": False,
+                        "error": "DEVICE_NOT_FOUND_IN_ACS",
+                        "acs_device_id": acs_device_id,
+                        "status_code": status_code,
+                    }
+
+                return {
+                    "success": False,
+                    "error": "GENIEACS_TASK_FAILED",
+                    "acs_device_id": acs_device_id,
+                    "status_code": status_code,
+                    "details": exc.response.text,
+                }
+
+            return response.json() if response.text else {"success": True}
     async def wifi_scan(self, acs_device_id: str):
         return await self.create_task(
             acs_device_id,

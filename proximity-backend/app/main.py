@@ -55,6 +55,13 @@ from app.modules.customer_services.router import router as customer_services_rou
 from app.modules.service_verification.router import \
     router as service_verification_router
 
+from app.modules.router_replacement.router import \
+    router as router_replacement_router
+
+from app.modules.router_availability.router import (
+    router as router_availability_router,
+)
+
 app = FastAPI(
     title=settings.app_name,
     version="6.0.0-foundation",
@@ -119,6 +126,10 @@ app.include_router(device_authority_router)
 app.include_router(customer_services_router)
 
 app.include_router(service_verification_router)
+
+app.include_router(router_replacement_router)
+
+app.include_router(router_availability_router)
 
 @app.get("/health")
 async def health():
