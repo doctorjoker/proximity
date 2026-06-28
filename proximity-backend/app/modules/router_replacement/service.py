@@ -8,82 +8,132 @@ from app.modules.service_verification.service import (
     verify_customer_service,
 )
 
-
 from app.modules.router_availability.service import (
     wait_router_available,
 )
+
+from app.modules.service_workflows.service import (
+    start_workflow,
+    workflow_running,
+    workflow_completed,
+    workflow_failed,
+)
+
 
 async def replace_customer_router(
     service_code: str,
     old_acs_device_id: str,
     new_acs_device_id: str,
 ):
+    workflow = start_workflow(
+        workflow_type="ROUTER_REPLACEMENT",
+        service_code=service_code,
+        acs_device_id=new_acs_device_id,
+        payload={
+            "old_device": old_acs_device_id,
+            "new_device": new_acs_device_id,
+        },
+    )
 
-    #
-    # STEP 1
-    # Device Authority
-    #
+    workflow_code = workflow["workflow_code"]
+
+    workflow_running(workflow_code, "BINDING", 20)
+
     replacement = replace_authorized_device(
         service_code,
         old_acs_device_id,
         new_acs_device_id,
     )
 
-    availability = await wait_router_available(
-        new_acs_device_id,
-    )
+    if not replacement["success"]:
+        workflow_failed(
+            workflow_code,
+            "DEVICE_BINDING_FAILED",
+            replacement.get("reason", "Device binding failed"),
+        )
+        return {
+            **replacement,
+            "workflow_code": workflow_code,
+        }
+
+    workflow_running(workflow_code, "WAIT_ROUTER", 40)
+
+    availability = await wait_router_available(new_acs_device_id)
 
     if not availability["success"]:
+        workflow_failed(
+            workflow_code,
+            "ROUTER_NOT_AVAILABLE",
+            availability.get("state", "Router not available"),
+        )
         return {
             "success": False,
+            "workflow_code": workflow_code,
             "step": "WAIT_ROUTER",
             "binding": replacement,
             "availability": availability,
         }
 
-    if not replacement["success"]:
-        return replacement
+    workflow_running(workflow_code, "RESTORE", 70)
 
-    #
-    # STEP 2
-    # Restore Desired Configuration
-    #
     restore = await restore_customer_service_configuration(
         service_code,
         new_acs_device_id,
     )
 
     if not restore["success"]:
+        workflow_failed(
+            workflow_code,
+            "RESTORE_FAILED",
+            restore.get("state", "Restore failed"),
+        )
         return {
             "success": False,
+            "workflow_code": workflow_code,
             "step": "RESTORE",
             "binding": replacement,
+            "availability": availability,
             "restore": restore,
         }
 
-    #
-    # STEP 3
-    # Verify Runtime
-    #
+    workflow_running(workflow_code, "VERIFY", 90)
+
     verification = await verify_customer_service(
         service_code,
         new_acs_device_id,
     )
 
+    result = {
+        "state": verification["state"],
+        "binding": {
+            "success": replacement["success"],
+            "device": replacement["device"]["acs_device_id"],
+        },
+        "availability": {
+            "success": availability["success"],
+            "state": availability["state"],
+        },
+        "restore": {
+            "success": restore["success"],
+            "state": restore["state"],
+        },
+        "verification": {
+            "success": verification["success"],
+            "state": verification["state"],
+        },
+    }
+
+    workflow_completed(workflow_code, result)
+
     return {
         "success": True,
+        "workflow_code": workflow_code,
         "service_code": service_code,
-
         "old_device": old_acs_device_id,
         "new_device": new_acs_device_id,
-
         "binding": replacement["device"],
-
         "availability": availability,
-
         "restore": restore,
-
         "verification": verification,
-
         "state": verification["state"],
     }
