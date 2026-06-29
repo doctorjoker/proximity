@@ -19,6 +19,20 @@ from app.modules.service_workflows.service import (
     workflow_failed,
 )
 
+from app.modules.service_workflows.runner import WorkflowRunner
+
+from app.modules.service_workflows.registry import (
+    WORKFLOW_HANDLERS_REGISTRY,
+)
+
+from app.modules.service_workflows.definitions.router_replacement import (
+    ROUTER_REPLACEMENT_WORKFLOW,
+)
+
+
+runner = WorkflowRunner(
+    WORKFLOW_HANDLERS_REGISTRY,
+)
 
 async def replace_customer_router(
     service_code: str,
@@ -137,3 +151,22 @@ async def replace_customer_router(
         "verification": verification,
         "state": verification["state"],
     }
+
+
+async def replace_customer_router_v2(
+    workflow_code: str,
+    service_code: str,
+    old_acs_device_id: str,
+    new_acs_device_id: str,
+):
+    context = {
+        "service_code": service_code,
+        "old_acs_device_id": old_acs_device_id,
+        "new_acs_device_id": new_acs_device_id,
+    }
+
+    return await runner.run(
+        workflow_code=workflow_code,
+        workflow_definition=ROUTER_REPLACEMENT_WORKFLOW,
+        context=context,
+    )
