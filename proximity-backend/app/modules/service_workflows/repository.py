@@ -295,3 +295,62 @@ def fail_workflow_step(
             )
 
             return cur.fetchone()
+
+
+def list_workflows(limit: int = 50):
+    with get_conn() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+            cur.execute(
+                """
+                SELECT
+                    workflow_code,
+                    workflow_type,
+                    service_code,
+                    acs_device_id,
+                    status,
+                    current_step,
+                    progress,
+                    started_by,
+                    started_at,
+                    completed_at,
+                    error_code,
+                    error_message
+                FROM service_workflows
+                ORDER BY started_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+
+            return cur.fetchall()
+
+
+def get_workflow_steps(workflow_code: str):
+    with get_conn() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    workflow_code,
+                    step_name,
+                    status,
+                    input,
+                    output,
+                    started_at,
+                    completed_at,
+                    duration_ms,
+                    error_code,
+                    error_message
+                FROM workflow_steps
+                WHERE workflow_code = %s
+                ORDER BY started_at ASC
+                """,
+                (workflow_code,),
+            )
+
+            return cur.fetchall()

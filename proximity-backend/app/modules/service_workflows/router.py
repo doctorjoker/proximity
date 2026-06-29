@@ -8,6 +8,8 @@ from .service import (
     workflow_running,
     workflow_completed,
     workflow_failed,
+    read_workflows,
+    read_workflow_steps,
 )
 
 router = APIRouter(
@@ -25,6 +27,25 @@ async def api_start_workflow(
         service_code=request.service_code,
         acs_device_id=request.acs_device_id,
     )
+
+
+@router.get("")
+async def api_list_workflows(
+    limit: int = 50,
+):
+    return {
+        "items": read_workflows(limit=limit),
+    }
+
+
+@router.get("/{workflow_code}/steps")
+async def api_get_workflow_steps(
+    workflow_code: str,
+):
+    return {
+        "workflow_code": workflow_code,
+        "steps": read_workflow_steps(workflow_code),
+    }
 
 @router.get("/{workflow_code}")
 async def api_get_workflow(

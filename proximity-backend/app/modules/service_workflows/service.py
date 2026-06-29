@@ -8,6 +8,8 @@ from .repository import (
     create_workflow_step,
     complete_workflow_step,
     fail_workflow_step,
+    list_workflows,
+    get_workflow_steps,
 )
 
 
@@ -104,3 +106,11 @@ def workflow_step_failed(
         error_message=error_message,
         output_data=output_data,
     )
+
+
+def read_workflows(limit: int = 50):
+    return list_workflows(limit=limit)
+
+
+def read_workflow_steps(workflow_code: str):
+    return get_workflow_steps(workflow_code)
