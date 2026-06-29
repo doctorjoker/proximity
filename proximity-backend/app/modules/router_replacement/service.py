@@ -30,9 +30,13 @@ from app.modules.service_workflows.definitions.router_replacement import (
 )
 
 
+from app.modules.service_workflows.executor import WorkflowExecutor
+
 runner = WorkflowRunner(
     WORKFLOW_HANDLERS_REGISTRY,
 )
+
+executor = WorkflowExecutor()
 
 async def replace_customer_router(
     service_code: str,
@@ -165,8 +169,8 @@ async def replace_customer_router_v2(
         "new_acs_device_id": new_acs_device_id,
     }
 
-    return await runner.run(
+    return await executor.execute(
+        workflow_type="ROUTER_REPLACEMENT",
         workflow_code=workflow_code,
-        workflow_definition=ROUTER_REPLACEMENT_WORKFLOW,
         context=context,
     )
