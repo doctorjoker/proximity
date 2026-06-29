@@ -6,6 +6,7 @@ from .registry import WORKFLOW_HANDLERS_REGISTRY
 
 from .definitions import WORKFLOW_DEFINITIONS
 
+from .models import WorkflowInstance
 
 class WorkflowExecutor:
 
@@ -26,6 +27,15 @@ class WorkflowExecutor:
             raise Exception(
                 f"Workflow {workflow_code} not found"
             )
+
+        instance = WorkflowInstance(
+            workflow_code=workflow_code,
+            workflow_type=workflow_type,
+            context=context,
+            status=workflow["status"],
+            current_step=workflow["current_step"],
+            progress=workflow["progress"],
+        )
 
         workflow_definition = WORKFLOW_DEFINITIONS[workflow_type]
 
