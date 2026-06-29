@@ -40,7 +40,6 @@ class WorkflowExecutor:
         workflow_definition = WORKFLOW_DEFINITIONS[workflow_type]
 
         return await self.runner.run(
-            workflow_code=workflow_code,
-            workflow_definition=workflow_definition,
-            context=context,
-        )
+           workflow=instance,
+           workflow_definition=workflow_definition,
+       )

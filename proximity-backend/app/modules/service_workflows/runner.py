@@ -7,6 +7,7 @@ from app.modules.service_workflows.service import (
     workflow_step_failed,
 )
 
+from app.modules.service_workflows.models import WorkflowInstance
 
 class WorkflowRunner:
 
@@ -15,10 +16,12 @@ class WorkflowRunner:
 
     async def run(
         self,
-        workflow_code: str,
+        workflow: WorkflowInstance,
         workflow_definition: list,
-        context: dict,
     ):
+        workflow_code = workflow.workflow_code
+        context = workflow.context
+
         try:
             for step in workflow_definition:
                 step_name = step["step"]
