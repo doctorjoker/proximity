@@ -5,6 +5,9 @@ from .repository import (
     update_workflow_status,
     complete_workflow,
     fail_workflow,
+    create_workflow_step,
+    complete_workflow_step,
+    fail_workflow_step,
 )
 
 
@@ -64,4 +67,40 @@ def workflow_failed(
         workflow_code=workflow_code,
         error_code=error_code,
         error_message=error_message,
+    )
+
+
+def workflow_step_started(
+    workflow_code: str,
+    step_name: str,
+    input_data: dict | None = None,
+):
+    return create_workflow_step(
+        workflow_code=workflow_code,
+        step_name=step_name,
+        input_data=input_data,
+    )
+
+
+def workflow_step_completed(
+    step_id: str,
+    output_data: dict | None = None,
+):
+    return complete_workflow_step(
+        step_id=step_id,
+        output_data=output_data,
+    )
+
+
+def workflow_step_failed(
+    step_id: str,
+    error_code: str,
+    error_message: str,
+    output_data: dict | None = None,
+):
+    return fail_workflow_step(
+        step_id=step_id,
+        error_code=error_code,
+        error_message=error_message,
+        output_data=output_data,
     )

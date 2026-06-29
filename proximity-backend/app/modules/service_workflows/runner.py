@@ -2,6 +2,9 @@ from app.modules.service_workflows.service import (
     workflow_running,
     workflow_completed,
     workflow_failed,
+    workflow_step_started,
+    workflow_step_completed,
+    workflow_step_failed,
 )
 
 
@@ -28,6 +31,14 @@ class WorkflowRunner:
                     progress,
                 )
 
+                step_record = workflow_step_started(
+                    workflow_code,
+                    step_name,
+                    {
+                        "handler": handler_name,
+                    },
+                )
+
                 handler = self.handlers[handler_name]
 
                 result = await handler(context)
@@ -42,6 +53,19 @@ class WorkflowRunner:
                 context[context_key] = result
 
                 if isinstance(result, dict) and result.get("success") is False:
+                    workflow_step_failed(
+                        step_record["id"],
+                        step_name,
+                        result.get("reason", "Step failed"),
+                        {
+                            "success": False,
+                            "state": (
+                                result.get("state")
+                                if isinstance(result, dict)
+                                else None
+                            ),
+                        },
+                    )
                     workflow_failed(
                         workflow_code,
                         step_name,
@@ -56,6 +80,17 @@ class WorkflowRunner:
                         "context": context,
                     }
 
+                workflow_step_completed(
+                    step_record["id"],
+                {
+                        "success": result.get("success", True)
+                        if isinstance(result, dict)
+                        else True,
+                        "state": result.get("state")
+                        if isinstance(result, dict)
+                        else None,
+                },
+              )
             workflow_completed(
                 workflow_code,
                 {

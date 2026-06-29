@@ -190,3 +190,108 @@ def get_workflow(
             )
 
             return cur.fetchone()
+
+def create_workflow_step(
+    workflow_code: str,
+    step_name: str,
+    input_data: dict | None = None,
+):
+    with get_conn() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+
+            cur.execute(
+                """
+                INSERT INTO workflow_steps
+                (
+                    workflow_code,
+                    step_name,
+                    status,
+                    input
+                )
+                VALUES
+                (
+                    %s,
+                    %s,
+                    'RUNNING',
+                    %s
+                )
+                RETURNING *
+                """,
+                (
+                    workflow_code,
+                    step_name,
+                    psycopg2.extras.Json(input_data or {}),
+                ),
+            )
+
+            return cur.fetchone()
+
+
+def complete_workflow_step(
+    step_id: str,
+    output_data: dict | None = None,
+):
+    with get_conn() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+
+            cur.execute(
+                """
+                UPDATE workflow_steps
+                SET
+                    status='SUCCESS',
+                    completed_at=now(),
+                    duration_ms = EXTRACT(
+                        EPOCH FROM (now() - started_at)
+                    ) * 1000,
+                    output=%s
+                WHERE id=%s
+                RETURNING *
+                """,
+                (
+                    psycopg2.extras.Json(output_data or {}),
+                    step_id,
+                ),
+            )
+
+            return cur.fetchone()
+
+
+def fail_workflow_step(
+    step_id: str,
+    error_code: str,
+    error_message: str,
+    output_data: dict | None = None,
+):
+    with get_conn() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+
+            cur.execute(
+                """
+                UPDATE workflow_steps
+                SET
+                    status='FAILED',
+                    completed_at=now(),
+                    duration_ms = EXTRACT(
+                        EPOCH FROM (now() - started_at)
+                    ) * 1000,
+                    error_code=%s,
+                    error_message=%s,
+                    output=%s
+                WHERE id=%s
+                RETURNING *
+                """,
+                (
+                    error_code,
+                    error_message,
+                    psycopg2.extras.Json(output_data or {}),
+                    step_id,
+                ),
+            )
+
+            return cur.fetchone()
