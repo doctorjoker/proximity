@@ -1,27 +1,11 @@
 from app.modules.service_workflows.executor import WorkflowExecutor
-
-
-executor = WorkflowExecutor()
-
-
-async def schedule_workflow_execution(
-    workflow_type: str,
-    workflow_code: str,
-    context: dict,
-):
-    return await executor.execute(
-        workflow_type=workflow_type,
-        workflow_code=workflow_code,
-        context=context,
-    )
-
-from app.modules.service_workflows.executor import WorkflowExecutor
 from app.modules.service_workflows.queue_repository import (
     enqueue_workflow,
     dequeue_next,
     mark_queue_completed,
     mark_queue_failed,
 )
+from app.modules.service_workflows.service import read_workflow
 
 
 executor = WorkflowExecutor()
@@ -36,19 +20,40 @@ async def schedule_workflow_execution(
         workflow_code=workflow_code,
     )
 
+    return {
+        "success": True,
+        "workflow_code": workflow_code,
+        "status": "QUEUED",
+    }
+
+
+async def schedule_next_workflow():
     queue_item = dequeue_next()
 
     if queue_item is None:
-        return {
-            "success": False,
-            "workflow_code": workflow_code,
-            "error": "NO_QUEUE_ITEM_AVAILABLE",
-        }
+        return None
+
+    workflow = read_workflow(
+        queue_item["workflow_code"],
+    )
+
+    if workflow is None:
+        mark_queue_failed(
+            queue_item["id"],
+            "WORKFLOW_NOT_FOUND",
+        )
+        return None
+
+    context = {
+        "service_code": workflow["service_code"],
+        "old_acs_device_id": workflow["payload"].get("old_device"),
+        "new_acs_device_id": workflow["payload"].get("new_device"),
+    }
 
     try:
         result = await executor.execute(
-            workflow_type=workflow_type,
-            workflow_code=queue_item["workflow_code"],
+            workflow_type=workflow["workflow_type"],
+            workflow_code=workflow["workflow_code"],
             context=context,
         )
 
@@ -72,7 +77,3 @@ async def schedule_workflow_execution(
             str(exc),
         )
         raise
-
-
-async def schedule_next_workflow():
-    return None
