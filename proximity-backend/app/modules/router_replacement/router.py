@@ -1,11 +1,11 @@
 from fastapi import APIRouter, BackgroundTasks
 
 from app.modules.service_workflows.service import start_workflow
+from app.modules.service_workflows.scheduler import schedule_workflow_execution
 
 from .schemas import RouterReplacementRequest
 from .service import (
     replace_customer_router,
-    replace_customer_router_v2,
 )
 
 router = APIRouter(
@@ -25,6 +25,7 @@ async def replace_router(
         payload.new_acs_device_id,
     )
 
+
 @router.post("/{service_code}/replace-v2")
 async def api_replace_router_v2(
     service_code: str,
@@ -42,11 +43,14 @@ async def api_replace_router_v2(
     )
 
     background_tasks.add_task(
-        replace_customer_router_v2,
+        schedule_workflow_execution,
+        workflow_type="ROUTER_REPLACEMENT",
         workflow_code=workflow["workflow_code"],
-        service_code=service_code,
-        old_acs_device_id=request.old_acs_device_id,
-        new_acs_device_id=request.new_acs_device_id,
+        context={
+            "service_code": service_code,
+            "old_acs_device_id": request.old_acs_device_id,
+            "new_acs_device_id": request.new_acs_device_id,
+        },
     )
 
     return {

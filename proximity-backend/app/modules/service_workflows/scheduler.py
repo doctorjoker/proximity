@@ -4,7 +4,7 @@ from app.modules.service_workflows.executor import WorkflowExecutor
 executor = WorkflowExecutor()
 
 
-async def run_workflow(
+async def schedule_workflow_execution(
     workflow_type: str,
     workflow_code: str,
     context: dict,
