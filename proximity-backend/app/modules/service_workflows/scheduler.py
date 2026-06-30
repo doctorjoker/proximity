@@ -72,3 +72,7 @@ async def schedule_workflow_execution(
             str(exc),
         )
         raise
+
+
+async def schedule_next_workflow():
+    return None
