@@ -12,7 +12,10 @@ from .repository import (
     get_workflow_steps,
 )
 
-from .operations_repository import get_workflow_statistics
+from .operations_repository import (
+    get_workflow_statistics,
+    list_queue,
+)
 
 def start_workflow(
     workflow_type: str,
@@ -119,3 +122,6 @@ def read_workflow_steps(workflow_code: str):
 
 def read_workflow_statistics():
     return get_workflow_statistics()
+
+def read_queue(limit: int = 50):
+    return list_queue(limit)

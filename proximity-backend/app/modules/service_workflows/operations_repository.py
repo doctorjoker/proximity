@@ -44,3 +44,32 @@ def get_workflow_statistics():
                 "workflows": workflow_stats,
                 "queue": queue_stats,
             }
+
+def list_queue(limit: int = 50):
+
+    with get_conn() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor,
+        ) as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    workflow_code,
+                    status,
+                    priority,
+                    retry_count,
+                    worker_id,
+                    last_error,
+                    scheduled_at,
+                    started_at,
+                    completed_at,
+                    created_at
+                FROM workflow_execution_queue
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+
+            return cur.fetchall()

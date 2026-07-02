@@ -11,6 +11,7 @@ from .service import (
     read_workflows,
     read_workflow_steps,
     read_workflow_statistics,
+    read_queue,
 )
 
 router = APIRouter(
@@ -29,6 +30,13 @@ async def api_start_workflow(
         acs_device_id=request.acs_device_id,
     )
 
+@router.get("/queue")
+async def api_queue(
+    limit: int = 50,
+):
+    return {
+        "items": read_queue(limit),
+    }
 
 @router.get("")
 async def api_list_workflows(
