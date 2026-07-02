@@ -130,3 +130,34 @@ def mark_queue_failed(queue_id: str, error: str):
             )
 
             return cur.fetchone()
+
+
+def reschedule_queue_item(
+    queue_id: str,
+    delay_seconds: int = 30,
+):
+    with get_conn() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+            cur.execute(
+                """
+                UPDATE workflow_execution_queue
+                SET
+                    status = 'PENDING',
+                    retry_count = retry_count + 1,
+                    scheduled_at = now() + (%s || ' seconds')::interval,
+                    started_at = NULL,
+                    completed_at = NULL,
+                    worker_id = NULL,
+                    updated_at = now()
+                WHERE id = %s
+                RETURNING *
+                """,
+                (
+                    delay_seconds,
+                    queue_id,
+                ),
+            )
+
+            return cur.fetchone()
