@@ -4,9 +4,13 @@ from app.modules.service_workflows.queue_repository import (
     dequeue_next,
     mark_queue_completed,
     mark_queue_failed,
+    reschedule_queue_item,
 )
 from app.modules.service_workflows.service import read_workflow
 
+
+MAX_RETRY_COUNT = 3
+RETRY_DELAY_SECONDS = 30
 
 executor = WorkflowExecutor()
 
@@ -27,6 +31,26 @@ async def schedule_workflow_execution(
     }
 
 
+def _should_retry(queue_item: dict) -> bool:
+    return queue_item.get("retry_count", 0) < MAX_RETRY_COUNT
+
+
+def _reschedule_or_fail(
+    queue_item: dict,
+    error: str,
+):
+    if _should_retry(queue_item):
+        return reschedule_queue_item(
+            queue_item["id"],
+            delay_seconds=RETRY_DELAY_SECONDS,
+        )
+
+    return mark_queue_failed(
+        queue_item["id"],
+        error,
+    )
+
+
 async def schedule_next_workflow():
     queue_item = dequeue_next()
 
@@ -38,8 +62,8 @@ async def schedule_next_workflow():
     )
 
     if workflow is None:
-        mark_queue_failed(
-            queue_item["id"],
+        _reschedule_or_fail(
+            queue_item,
             "WORKFLOW_NOT_FOUND",
         )
         return None
@@ -58,8 +82,8 @@ async def schedule_next_workflow():
         )
 
         if result.get("success") is False:
-            mark_queue_failed(
-                queue_item["id"],
+            _reschedule_or_fail(
+                queue_item,
                 result.get("error")
                 or result.get("failed_step")
                 or "WORKFLOW_FAILED",
@@ -72,8 +96,8 @@ async def schedule_next_workflow():
         return result
 
     except Exception as exc:
-        mark_queue_failed(
-            queue_item["id"],
+        _reschedule_or_fail(
+            queue_item,
             str(exc),
         )
         raise
