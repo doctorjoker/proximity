@@ -161,3 +161,25 @@ def reschedule_queue_item(
             )
 
             return cur.fetchone()
+
+
+def recover_running_workflows():
+    with get_conn() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor
+        ) as cur:
+
+            cur.execute(
+                """
+                UPDATE workflow_execution_queue
+                SET
+                    status='PENDING',
+                    worker_id=NULL,
+                    started_at=NULL,
+                    updated_at=now()
+                WHERE status='RUNNING'
+                RETURNING *
+                """
+            )
+
+            return cur.fetchall()
