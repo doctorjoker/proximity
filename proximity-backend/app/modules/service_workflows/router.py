@@ -10,6 +10,7 @@ from .service import (
     workflow_failed,
     read_workflows,
     read_workflow_steps,
+    read_workflow_statistics,
 )
 
 router = APIRouter(
@@ -37,6 +38,9 @@ async def api_list_workflows(
         "items": read_workflows(limit=limit),
     }
 
+@router.get("/stats")
+async def api_workflow_statistics():
+    return read_workflow_statistics()
 
 @router.get("/{workflow_code}/steps")
 async def api_get_workflow_steps(
