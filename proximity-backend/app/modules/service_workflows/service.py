@@ -15,6 +15,7 @@ from .repository import (
 from .operations_repository import (
     get_workflow_statistics,
     list_queue,
+    get_dashboard_data,
 )
 
 def start_workflow(
@@ -125,3 +126,6 @@ def read_workflow_statistics():
 
 def read_queue(limit: int = 50):
     return list_queue(limit)
+
+def read_dashboard(limit: int = 20):
+    return get_dashboard_data(limit)

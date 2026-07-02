@@ -12,6 +12,7 @@ from .service import (
     read_workflow_steps,
     read_workflow_statistics,
     read_queue,
+    read_dashboard,
 )
 
 router = APIRouter(
@@ -37,6 +38,12 @@ async def api_queue(
     return {
         "items": read_queue(limit),
     }
+
+@router.get("/dashboard")
+async def api_dashboard(
+    limit: int = 20,
+):
+    return read_dashboard(limit)
 
 @router.get("")
 async def api_list_workflows(

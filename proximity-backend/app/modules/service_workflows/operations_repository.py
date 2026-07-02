@@ -73,3 +73,49 @@ def list_queue(limit: int = 50):
             )
 
             return cur.fetchall()
+
+
+def get_dashboard_data(limit: int = 20):
+
+    stats = get_workflow_statistics()
+
+    queue = list_queue(limit)
+
+    with get_conn() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor,
+        ) as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    workflow_code,
+                    workflow_type,
+                    service_code,
+                    status,
+                    current_step,
+                    progress,
+                    started_at,
+                    completed_at
+                FROM service_workflows
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+
+            workflows = cur.fetchall()
+
+    workflow_stats = stats.get("workflows", {})
+
+    return {
+        "summary": {
+            "pending": workflow_stats.get("PENDING", 0),
+            "running": workflow_stats.get("RUNNING", 0),
+            "completed": workflow_stats.get("COMPLETED", 0),
+            "failed": workflow_stats.get("FAILED", 0),
+            "created": workflow_stats.get("CREATED", 0),
+        },
+        "queue": queue,
+        "recent_workflows": workflows,
+    }
