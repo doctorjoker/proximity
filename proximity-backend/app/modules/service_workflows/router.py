@@ -2,6 +2,8 @@ from fastapi import APIRouter
 
 from .schemas import WorkflowStartRequest
 
+from .service import get_business_dashboard
+
 from .service import (
     start_workflow,
     read_workflow,
@@ -44,6 +46,11 @@ async def api_dashboard(
     limit: int = 20,
 ):
     return read_dashboard(limit)
+
+@router.get("/business-dashboard")
+def business_dashboard(limit: int = 50):
+    return get_business_dashboard(limit)
+
 
 @router.get("")
 async def api_list_workflows(
@@ -103,5 +110,4 @@ async def api_fail(
         "TIMEOUT",
         "Router did not appear in ACS",
     )
-
 

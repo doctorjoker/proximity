@@ -1,3 +1,4 @@
+from .business_repository import list_business_operations
 from .repository import (
     create_workflow,
     next_workflow_code,
@@ -129,3 +130,9 @@ def read_queue(limit: int = 50):
 
 def read_dashboard(limit: int = 20):
     return get_dashboard_data(limit)
+
+def get_business_dashboard(limit: int = 50):
+
+    return {
+        "items": list_business_operations(limit),
+    }
