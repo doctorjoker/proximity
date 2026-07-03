@@ -13,6 +13,7 @@ export default function KpiCard({
       sx={{
         borderRadius: 3,
         height: "100%",
+        minHeight: 108,
         transition: "0.2s",
         borderTop: `4px solid ${color}`,
         "&:hover": {
@@ -21,13 +22,21 @@ export default function KpiCard({
         },
       }}
     >
-      <CardContent>
+      <CardContent
+        sx={{
+          py: 2,
+          px: 2.5,
+          "&:last-child": {
+            pb: 2,
+          },
+        }}
+      >
         <Stack
           direction="row"
           justifyContent="space-between"
           alignItems="flex-start"
         >
-          <Stack spacing={1}>
+          <Stack spacing={0.4}>
             <Typography
               variant="caption"
               sx={{
@@ -35,16 +44,18 @@ export default function KpiCard({
                 textTransform: "uppercase",
                 letterSpacing: 1,
                 fontWeight: 700,
+                fontSize: 11,
               }}
             >
               {title}
             </Typography>
 
             <Typography
-              variant="h3"
+              variant="h4"
               sx={{
                 fontWeight: 800,
                 color,
+                lineHeight: 1,
               }}
             >
               {value}
