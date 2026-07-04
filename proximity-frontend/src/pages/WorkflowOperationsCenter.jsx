@@ -5,6 +5,8 @@ import OperationsHeader from "../components/operations/OperationsHeader";
 import OperationsSummary from "../components/operations/OperationsSummary";
 import BusinessOperationsTable from "../components/operations/BusinessOperationsTable";
 
+import OperationDrawer from "../components/operations/OperationDrawer";
+
 const API = "/api/v1/service-workflows/business-dashboard?limit=50";
 
 export default function WorkflowOperationsCenter() {
@@ -66,6 +68,11 @@ export default function WorkflowOperationsCenter() {
         loading={loading}
         error={error}
         onSelect={setSelectedOperation}
+      />
+      <OperationDrawer
+        open={selectedOperation !== null}
+        operation={selectedOperation}
+        onClose={() => setSelectedOperation(null)}
       />
     </AppLayout>
   );
