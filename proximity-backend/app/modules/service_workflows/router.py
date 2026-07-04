@@ -28,11 +28,13 @@ router = APIRouter(
 async def api_start_workflow(
     request: WorkflowStartRequest,
 ):
-    return start_workflow(
+    return await start_workflow(
         workflow_type=request.workflow_type,
         service_code=request.service_code,
         acs_device_id=request.acs_device_id,
+        payload=request.payload,
     )
+
 
 @router.get("/queue")
 async def api_queue(
@@ -42,11 +44,13 @@ async def api_queue(
         "items": read_queue(limit),
     }
 
+
 @router.get("/dashboard")
 async def api_dashboard(
     limit: int = 20,
 ):
     return read_dashboard(limit)
+
 
 @router.get("/business-dashboard")
 def business_dashboard(limit: int = 50):
@@ -61,9 +65,11 @@ async def api_list_workflows(
         "items": read_workflows(limit=limit),
     }
 
+
 @router.get("/stats")
 async def api_workflow_statistics():
     return read_workflow_statistics()
+
 
 @router.get("/{workflow_code}/steps")
 async def api_get_workflow_steps(
@@ -73,6 +79,7 @@ async def api_get_workflow_steps(
         "workflow_code": workflow_code,
         "steps": read_workflow_steps(workflow_code),
     }
+
 
 @router.get("/{workflow_code}/timeline")
 async def api_workflow_timeline(
@@ -84,6 +91,7 @@ async def api_workflow_timeline(
             workflow_code,
         ),
     }
+
 
 @router.get("/{workflow_code}")
 async def api_get_workflow(
@@ -102,6 +110,7 @@ async def api_running(
         progress=20,
     )
 
+
 @router.post("/{workflow_code}/complete")
 async def api_complete(
     workflow_code: str,
@@ -113,6 +122,7 @@ async def api_complete(
         },
     )
 
+
 @router.post("/{workflow_code}/fail")
 async def api_fail(
     workflow_code: str,
@@ -122,4 +132,3 @@ async def api_fail(
         "TIMEOUT",
         "Router did not appear in ACS",
     )
-

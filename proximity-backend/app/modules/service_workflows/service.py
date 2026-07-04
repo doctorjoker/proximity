@@ -24,6 +24,7 @@ from .events_repository import (
     list_events,
 )
 
+
 def record_event(
     workflow_code: str,
     event_type: str,
@@ -45,14 +46,23 @@ def record_event(
         metadata=metadata,
     )
 
-def start_workflow(
+
+async def start_workflow(
     workflow_type: str,
     service_code: str,
-    acs_device_id: str,
+    acs_device_id: str | None = None,
     payload: dict | None = None,
     started_by: str = "PROXIMITY",
     parent_workflow_code: str | None = None,
 ):
+    payload = payload or {}
+
+    effective_acs_device_id = (
+        acs_device_id
+        or payload.get("acs_device_id")
+        or payload.get("old_acs_device_id")
+        or payload.get("new_acs_device_id")
+    )
 
     workflow_code = next_workflow_code()
 
@@ -60,7 +70,7 @@ def start_workflow(
         workflow_code=workflow_code,
         workflow_type=workflow_type,
         service_code=service_code,
-        acs_device_id=acs_device_id,
+        acs_device_id=effective_acs_device_id,
         payload=payload,
         started_by=started_by,
         parent_workflow_code=parent_workflow_code,
@@ -74,15 +84,42 @@ def start_workflow(
         description=f"{workflow_type} accepted by workflow engine",
     )
 
-    return workflow
+    context = {
+        "service_code": service_code,
+        **payload,
+    }
+
+    if acs_device_id is not None:
+        context["acs_device_id"] = acs_device_id
+
+    if "acs_device_id" not in context and effective_acs_device_id is not None:
+        context["acs_device_id"] = effective_acs_device_id
+
+    from .executor import WorkflowExecutor
+
+    executor = WorkflowExecutor()
+
+    execution = await executor.execute(
+        workflow_type=workflow_type,
+        workflow_code=workflow_code,
+        context=context,
+    )
+
+    return {
+        "workflow": workflow,
+        "execution": execution,
+    }
+
 
 def read_workflow_timeline(
     workflow_code: str,
 ):
     return list_events(workflow_code)
 
+
 def read_workflow(workflow_code: str):
     return get_workflow(workflow_code)
+
 
 def workflow_running(
     workflow_code: str,
@@ -166,14 +203,16 @@ def read_workflow_steps(workflow_code: str):
 def read_workflow_statistics():
     return get_workflow_statistics()
 
+
 def read_queue(limit: int = 50):
     return list_queue(limit)
+
 
 def read_dashboard(limit: int = 20):
     return get_dashboard_data(limit)
 
-def get_business_dashboard(limit: int = 50):
 
+def get_business_dashboard(limit: int = 50):
     return {
         "items": list_business_operations(limit),
     }
