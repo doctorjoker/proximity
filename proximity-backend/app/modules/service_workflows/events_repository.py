@@ -1,6 +1,6 @@
 from sqlalchemy import text
 
-from app.database import SessionLocal
+from app.db.session import SessionLocal
 
 
 def create_event(

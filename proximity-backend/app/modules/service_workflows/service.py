@@ -19,6 +19,32 @@ from .operations_repository import (
     get_dashboard_data,
 )
 
+from .events_repository import (
+    create_event,
+    list_events,
+)
+
+def record_event(
+    workflow_code: str,
+    event_type: str,
+    event_status: str,
+    title: str,
+    description: str | None = None,
+    operation_code: str | None = None,
+    worker_name: str | None = None,
+    metadata: dict | None = None,
+):
+    return create_event(
+        workflow_code=workflow_code,
+        operation_code=operation_code,
+        event_type=event_type,
+        event_status=event_status,
+        title=title,
+        description=description,
+        worker_name=worker_name,
+        metadata=metadata,
+    )
+
 def start_workflow(
     workflow_type: str,
     service_code: str,
@@ -30,7 +56,7 @@ def start_workflow(
 
     workflow_code = next_workflow_code()
 
-    return create_workflow(
+    workflow = create_workflow(
         workflow_code=workflow_code,
         workflow_type=workflow_type,
         service_code=service_code,
@@ -39,6 +65,21 @@ def start_workflow(
         started_by=started_by,
         parent_workflow_code=parent_workflow_code,
     )
+
+    record_event(
+        workflow_code=workflow_code,
+        event_type="WORKFLOW_CREATED",
+        event_status="SUCCESS",
+        title="Workflow created",
+        description=f"{workflow_type} accepted by workflow engine",
+    )
+
+    return workflow
+
+def read_workflow_timeline(
+    workflow_code: str,
+):
+    return list_events(workflow_code)
 
 def read_workflow(workflow_code: str):
     return get_workflow(workflow_code)

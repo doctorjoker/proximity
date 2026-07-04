@@ -15,6 +15,7 @@ from .service import (
     read_workflow_statistics,
     read_queue,
     read_dashboard,
+    read_workflow_timeline,
 )
 
 router = APIRouter(
@@ -71,6 +72,17 @@ async def api_get_workflow_steps(
     return {
         "workflow_code": workflow_code,
         "steps": read_workflow_steps(workflow_code),
+    }
+
+@router.get("/{workflow_code}/timeline")
+async def api_workflow_timeline(
+    workflow_code: str,
+):
+    return {
+        "workflow_code": workflow_code,
+        "events": read_workflow_timeline(
+            workflow_code,
+        ),
     }
 
 @router.get("/{workflow_code}")

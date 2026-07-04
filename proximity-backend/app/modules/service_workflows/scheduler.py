@@ -7,7 +7,7 @@ from app.modules.service_workflows.queue_repository import (
     reschedule_queue_item,
 )
 from app.modules.service_workflows.service import read_workflow
-
+from app.modules.service_workflows.service import record_event
 
 MAX_RETRY_COUNT = 3
 RETRY_DELAY_SECONDS = 30
@@ -73,7 +73,14 @@ async def schedule_next_workflow():
         "old_acs_device_id": workflow["payload"].get("old_device"),
         "new_acs_device_id": workflow["payload"].get("new_device"),
     }
-
+    record_event(
+        workflow_code=workflow["workflow_code"],
+        event_type="WORKFLOW_RUNNING",
+        event_status="RUNNING",
+        title="Workflow running",
+        description="Worker started workflow execution",
+        worker_name="PROXIMITY-WORKER",
+    )
     try:
         result = await executor.execute(
             workflow_type=workflow["workflow_type"],
@@ -82,13 +89,37 @@ async def schedule_next_workflow():
         )
 
         if result.get("success") is False:
-            _reschedule_or_fail(
-                queue_item,
+            failure_reason = (
                 result.get("error")
                 or result.get("failed_step")
-                or "WORKFLOW_FAILED",
+                or "WORKFLOW_FAILED"
+            )
+
+            record_event(
+                workflow_code=workflow["workflow_code"],
+                event_type="WORKFLOW_FAILED",
+                event_status="FAILED",
+                title="Workflow failed",
+                description=failure_reason,
+                worker_name="PROXIMITY-WORKER",
+                metadata=result,
+            )
+
+            _reschedule_or_fail(
+                queue_item,
+                failure_reason,
             )
         else:
+            record_event(
+                workflow_code=workflow["workflow_code"],
+                event_type="WORKFLOW_COMPLETED",
+                event_status="SUCCESS",
+                title="Workflow completed",
+                description="Workflow completed successfully",
+                worker_name="PROXIMITY-WORKER",
+                metadata=result,
+            )
+
             mark_queue_completed(
                 queue_item["id"],
             )
@@ -96,6 +127,18 @@ async def schedule_next_workflow():
         return result
 
     except Exception as exc:
+        record_event(
+            workflow_code=workflow["workflow_code"],
+            event_type="WORKFLOW_EXCEPTION",
+            event_status="FAILED",
+            title="Workflow exception",
+            description=str(exc),
+            worker_name="PROXIMITY-WORKER",
+            metadata={
+                "exception": str(exc),
+            },
+        )
+
         _reschedule_or_fail(
             queue_item,
             str(exc),
