@@ -1,55 +1,49 @@
 """
-EUREKA 8.0.0
+EUREKA 8.0.2
 
 Service Provisioning Workflow Steps
-
-Business logic implementation.
 """
 
-
-def bind_device(context: dict):
-    return {
-        "success": True,
-        "message": "Bind device placeholder",
-    }
+from .acs_service import acs_service
 
 
-def configure_ppp(context: dict):
-    return {
-        "success": True,
-        "message": "Configure PPP placeholder",
-    }
+async def bind_device(context):
+    return await acs_service.bind_device(
+        context,
+    )
 
 
-def configure_wifi(context: dict):
-    return {
-        "success": True,
-        "message": "Configure WiFi placeholder",
-    }
+async def configure_ppp(context):
+    return await acs_service.configure_ppp(
+        context,
+    )
 
 
-def configure_voip(context: dict):
-    return {
-        "success": True,
-        "message": "Configure VoIP placeholder",
-    }
+async def configure_wifi(context):
+    return await acs_service.configure_wifi(
+        context,
+    )
 
 
-def verify_configuration(context: dict):
-    return {
-        "success": True,
-        "message": "Verify configuration placeholder",
-    }
+async def configure_voip(context):
+    return await acs_service.configure_voip(
+        context,
+    )
 
 
-def verify_runtime(context: dict):
-    return {
-        "success": True,
-        "message": "Verify runtime placeholder",
-    }
+async def verify_configuration(context):
+    return await acs_service.verify_configuration(
+        context,
+    )
 
 
-def complete(context: dict):
+async def verify_runtime(context):
+    return await acs_service.verify_runtime(
+        context,
+    )
+
+
+async def complete(context):
     return {
         "success": True,
         "message": "Provisioning completed",

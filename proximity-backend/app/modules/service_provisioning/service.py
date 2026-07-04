@@ -1,5 +1,5 @@
 """
-EUREKA 8.0.0
+EUREKA 8.0.2
 
 Service Provisioning Orchestrator
 """
@@ -30,9 +30,9 @@ STEP_HANDLERS = {
 }
 
 
-def execute_service_provisioning(
+async def execute_service_provisioning(
     workflow_code: str,
-    context: dict,
+    context,
 ):
     for step in SERVICE_PROVISIONING_WORKFLOW:
 
@@ -48,16 +48,16 @@ def execute_service_provisioning(
 
         handler = STEP_HANDLERS[step_name]
 
-        result = handler(context)
+        result = await handler(context)
 
-        if not result["success"]:
+        if not result.get("success"):
 
             record_event(
                 workflow_code=workflow_code,
                 event_type=step_name,
                 event_status="FAILED",
                 title=step["title"],
-                description=result["message"],
+                description=result.get("message", "Unknown error"),
                 metadata=result,
             )
 
@@ -68,7 +68,7 @@ def execute_service_provisioning(
             event_type=step_name,
             event_status="SUCCESS",
             title=step["title"],
-            description=result["message"],
+            description=result.get("message", ""),
             metadata=result,
         )
 
