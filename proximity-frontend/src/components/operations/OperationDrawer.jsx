@@ -1,9 +1,15 @@
 import {
   Box,
-  Divider,
   Drawer,
+  Stack,
   Typography,
 } from "@mui/material";
+
+import OperationProgress from "./OperationProgress";
+import DrawerHeader from "./drawer/DrawerHeader";
+import DrawerCard from "./drawer/DrawerCard";
+import DrawerInfoRow from "./drawer/DrawerInfoRow";
+import DrawerTimeline from "./drawer/DrawerTimeline";
 
 export default function OperationDrawer({
   open,
@@ -17,54 +23,121 @@ export default function OperationDrawer({
       onClose={onClose}
       PaperProps={{
         sx: {
-          width: 430,
+          width: 560,
+          p: 3,
+          bgcolor: "#f8fafc",
         },
       }}
     >
-      <Box sx={{ p: 3 }}>
-        <Typography
-          variant="h5"
-          sx={{
-            fontWeight: 800,
-          }}
-        >
-          Business Operation
+      {!operation && (
+        <Typography color="text.secondary">
+          No operation selected.
         </Typography>
+      )}
 
-        <Divider sx={{ my: 2 }} />
+      {operation && (
+        <>
+          <DrawerHeader
+            title={operation.operation}
+            subtitle="Customer network operation"
+            status={operation.status}
+            operationCode={operation.service.service_code}
+            onClose={onClose}
+          />
 
-        {!operation && (
-          <Typography color="text.secondary">
-            No operation selected.
-          </Typography>
-        )}
+          <Stack spacing={0}>
+            <DrawerCard>
+              <Typography variant="overline" sx={{ color: "#4f46e5", fontWeight: 900 }}>
+                Customer
+              </Typography>
 
-        {operation && (
-          <>
-            <Typography variant="h6">
-              {operation.customer.name}
-            </Typography>
+              <DrawerInfoRow
+                label="Name"
+                value={operation.customer.name}
+              />
 
-            <Typography
-              color="text.secondary"
-            >
-              {operation.customer.customer_id}
-            </Typography>
+              <DrawerInfoRow
+                label="Customer ID"
+                value={operation.customer.customer_id}
+              />
+            </DrawerCard>
 
-            <Divider sx={{ my: 2 }} />
+            <DrawerCard>
+              <Typography variant="overline" sx={{ color: "#16a34a", fontWeight: 900 }}>
+                Service
+              </Typography>
 
-            <Typography>
-              {operation.service.plan}
-            </Typography>
+              <DrawerInfoRow
+                label="Plan"
+                value={operation.service.plan}
+              />
 
-            <Typography
-              color="text.secondary"
-            >
-              {operation.operation}
-            </Typography>
-          </>
-        )}
-      </Box>
+              <DrawerInfoRow
+                label="Status"
+                value={operation.service.status}
+              />
+            </DrawerCard>
+
+            <DrawerCard>
+              <Typography variant="overline" sx={{ color: "#2563eb", fontWeight: 900 }}>
+                Device
+              </Typography>
+
+              <DrawerInfoRow
+                label="ACS Device"
+                value={operation.device.acs_device_id}
+              />
+            </DrawerCard>
+
+            <DrawerCard>
+              <Typography variant="overline" sx={{ color: "#f59e0b", fontWeight: 900 }}>
+                Execution
+              </Typography>
+
+              <DrawerInfoRow
+                label="Current Step"
+                value={operation.current_step}
+              />
+
+              <Box sx={{ my: 2 }}>
+                <OperationProgress value={operation.progress} />
+              </Box>
+
+              <DrawerInfoRow
+                label="Worker"
+                value={operation.assigned_worker}
+              />
+            </DrawerCard>
+
+            <DrawerCard>
+              <DrawerTimeline
+                workflowCode={operation.workflow_code}
+              />
+            </DrawerCard>
+
+            <DrawerCard>
+              <Typography variant="overline" sx={{ color: "#64748b", fontWeight: 900 }}>
+                Technical Details
+              </Typography>
+
+              <DrawerInfoRow
+                label="Workflow"
+                value={operation.workflow_code}
+              />
+
+              <DrawerInfoRow
+                label="Operation"
+                value={operation.operation_code}
+              />
+
+              <DrawerInfoRow
+                label="Retry"
+                value={operation.retry_count}
+              />
+            </DrawerCard>
+          </Stack>
+        </>
+      )}
     </Drawer>
   );
 }
