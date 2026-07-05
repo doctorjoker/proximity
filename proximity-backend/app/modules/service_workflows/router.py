@@ -2,11 +2,10 @@ from fastapi import APIRouter
 
 from .schemas import WorkflowStartRequest
 
-from .service import get_business_dashboard
-
 from .service import (
     start_workflow,
     read_workflow,
+    read_workflow_details,
     workflow_running,
     workflow_completed,
     workflow_failed,
@@ -19,6 +18,7 @@ from .service import (
     read_queue,
     read_dashboard,
     read_workflow_timeline,
+    get_business_dashboard,
 )
 
 router = APIRouter(
@@ -40,18 +40,14 @@ async def api_start_workflow(
 
 
 @router.get("/queue")
-async def api_queue(
-    limit: int = 50,
-):
+async def api_queue(limit: int = 50):
     return {
         "items": read_queue(limit),
     }
 
 
 @router.get("/dashboard")
-async def api_dashboard(
-    limit: int = 20,
-):
+async def api_dashboard(limit: int = 20):
     return read_dashboard(limit)
 
 
@@ -61,9 +57,7 @@ def business_dashboard(limit: int = 50):
 
 
 @router.get("")
-async def api_list_workflows(
-    limit: int = 50,
-):
+async def api_list_workflows(limit: int = 50):
     return {
         "items": read_workflows(limit=limit),
     }
@@ -74,10 +68,18 @@ async def api_workflow_statistics():
     return read_workflow_statistics()
 
 
+@router.get("/{workflow_code}")
+async def api_get_workflow(workflow_code: str):
+    return read_workflow(workflow_code)
+
+
+@router.get("/{workflow_code}/details")
+async def api_get_workflow_details(workflow_code: str):
+    return read_workflow_details(workflow_code)
+
+
 @router.get("/{workflow_code}/steps")
-async def api_get_workflow_steps(
-    workflow_code: str,
-):
+async def api_get_workflow_steps(workflow_code: str):
     return {
         "workflow_code": workflow_code,
         "steps": read_workflow_steps(workflow_code),
@@ -85,49 +87,30 @@ async def api_get_workflow_steps(
 
 
 @router.get("/{workflow_code}/timeline")
-async def api_workflow_timeline(
-    workflow_code: str,
-):
+async def api_workflow_timeline(workflow_code: str):
     return {
         "workflow_code": workflow_code,
-        "events": read_workflow_timeline(
-            workflow_code,
-        ),
+        "events": read_workflow_timeline(workflow_code),
     }
 
 
-@router.get("/{workflow_code}")
-async def api_get_workflow(
-    workflow_code: str,
-):
-    return read_workflow(workflow_code)
-
-
 @router.post("/{workflow_code}/pause")
-async def api_pause_workflow(
-    workflow_code: str,
-):
+async def api_pause_workflow(workflow_code: str):
     return workflow_pause(workflow_code)
 
 
 @router.post("/{workflow_code}/resume")
-async def api_resume_workflow(
-    workflow_code: str,
-):
+async def api_resume_workflow(workflow_code: str):
     return workflow_resume(workflow_code)
 
 
 @router.post("/{workflow_code}/cancel")
-async def api_cancel_workflow(
-    workflow_code: str,
-):
+async def api_cancel_workflow(workflow_code: str):
     return workflow_cancel(workflow_code)
 
 
 @router.post("/{workflow_code}/running")
-async def api_running(
-    workflow_code: str,
-):
+async def api_running(workflow_code: str):
     return workflow_running(
         workflow_code,
         current_step="BINDING",
@@ -136,21 +119,17 @@ async def api_running(
 
 
 @router.post("/{workflow_code}/complete")
-async def api_complete(
-    workflow_code: str,
-):
+async def api_complete(workflow_code: str):
     return workflow_completed(
         workflow_code,
         {
-            "state": "SERVICE_OPERATIONAL"
+            "state": "SERVICE_OPERATIONAL",
         },
     )
 
 
 @router.post("/{workflow_code}/fail")
-async def api_fail(
-    workflow_code: str,
-):
+async def api_fail(workflow_code: str):
     return workflow_failed(
         workflow_code,
         "TIMEOUT",

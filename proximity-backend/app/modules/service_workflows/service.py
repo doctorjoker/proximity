@@ -114,6 +114,28 @@ async def start_workflow(
     }
 
 
+def read_workflow_details(workflow_code: str):
+    workflow = get_workflow(workflow_code)
+    steps = get_workflow_steps(workflow_code)
+    events = list_events(workflow_code)
+
+    status = workflow["status"] if workflow else None
+
+    controls = {
+        "can_pause": status == "RUNNING",
+        "can_resume": status == "PAUSED",
+        "can_cancel": status in ["CREATED", "RUNNING", "PAUSED", "FAILED"],
+        "can_retry": status == "FAILED",
+    }
+
+    return {
+        "workflow": workflow,
+        "steps": steps,
+        "events": events,
+        "controls": controls,
+    }
+
+
 def workflow_pause(workflow_code: str):
     workflow = pause_workflow(workflow_code)
 
