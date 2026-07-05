@@ -10,6 +10,9 @@ from .service import (
     workflow_running,
     workflow_completed,
     workflow_failed,
+    workflow_pause,
+    workflow_resume,
+    workflow_cancel,
     read_workflows,
     read_workflow_steps,
     read_workflow_statistics,
@@ -98,6 +101,27 @@ async def api_get_workflow(
     workflow_code: str,
 ):
     return read_workflow(workflow_code)
+
+
+@router.post("/{workflow_code}/pause")
+async def api_pause_workflow(
+    workflow_code: str,
+):
+    return workflow_pause(workflow_code)
+
+
+@router.post("/{workflow_code}/resume")
+async def api_resume_workflow(
+    workflow_code: str,
+):
+    return workflow_resume(workflow_code)
+
+
+@router.post("/{workflow_code}/cancel")
+async def api_cancel_workflow(
+    workflow_code: str,
+):
+    return workflow_cancel(workflow_code)
 
 
 @router.post("/{workflow_code}/running")

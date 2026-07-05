@@ -4,6 +4,9 @@ from .repository import (
     next_workflow_code,
     get_workflow,
     update_workflow_status,
+    pause_workflow,
+    resume_workflow,
+    cancel_workflow,
     complete_workflow,
     fail_workflow,
     create_workflow_step,
@@ -111,9 +114,49 @@ async def start_workflow(
     }
 
 
-def read_workflow_timeline(
-    workflow_code: str,
-):
+def workflow_pause(workflow_code: str):
+    workflow = pause_workflow(workflow_code)
+
+    record_event(
+        workflow_code=workflow_code,
+        event_type="WORKFLOW_PAUSED",
+        event_status="SUCCESS",
+        title="Workflow paused",
+        description="Workflow manually paused by operator",
+    )
+
+    return workflow
+
+
+def workflow_resume(workflow_code: str):
+    workflow = resume_workflow(workflow_code)
+
+    record_event(
+        workflow_code=workflow_code,
+        event_type="WORKFLOW_RESUMED",
+        event_status="SUCCESS",
+        title="Workflow resumed",
+        description="Workflow manually resumed by operator",
+    )
+
+    return workflow
+
+
+def workflow_cancel(workflow_code: str):
+    workflow = cancel_workflow(workflow_code)
+
+    record_event(
+        workflow_code=workflow_code,
+        event_type="WORKFLOW_CANCELLED",
+        event_status="SUCCESS",
+        title="Workflow cancelled",
+        description="Workflow manually cancelled by operator",
+    )
+
+    return workflow
+
+
+def read_workflow_timeline(workflow_code: str):
     return list_events(workflow_code)
 
 
@@ -121,11 +164,7 @@ def read_workflow(workflow_code: str):
     return get_workflow(workflow_code)
 
 
-def workflow_running(
-    workflow_code: str,
-    current_step: str,
-    progress: int,
-):
+def workflow_running(workflow_code: str, current_step: str, progress: int):
     return update_workflow_status(
         workflow_code=workflow_code,
         status="RUNNING",
@@ -134,21 +173,14 @@ def workflow_running(
     )
 
 
-def workflow_completed(
-    workflow_code: str,
-    result: dict,
-):
+def workflow_completed(workflow_code: str, result: dict):
     return complete_workflow(
         workflow_code=workflow_code,
         result=result,
     )
 
 
-def workflow_failed(
-    workflow_code: str,
-    error_code: str,
-    error_message: str,
-):
+def workflow_failed(workflow_code: str, error_code: str, error_message: str):
     return fail_workflow(
         workflow_code=workflow_code,
         error_code=error_code,
