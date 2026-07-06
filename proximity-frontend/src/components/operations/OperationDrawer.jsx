@@ -30,6 +30,7 @@ export default function OperationDrawer({
   onPause,
   onResume,
   onCancel,
+  onRetry,
 }) {
   const workflow = operation?.workflow;
   const customer = operation?.customer || {};
@@ -125,7 +126,7 @@ export default function OperationDrawer({
                 Controls
               </Typography>
 
-              <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+              <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
                 <Button variant="outlined" disabled={!controls.can_pause} onClick={onPause}>
                   Pause
                 </Button>
@@ -141,6 +142,15 @@ export default function OperationDrawer({
                   onClick={onCancel}
                 >
                   Cancel
+                </Button>
+
+                <Button
+                  variant="contained"
+                  color="warning"
+                  disabled={!controls.can_retry}
+                  onClick={onRetry}
+                >
+                  Retry
                 </Button>
               </Stack>
             </DrawerCard>
