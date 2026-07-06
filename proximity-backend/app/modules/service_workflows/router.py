@@ -12,6 +12,7 @@ from .service import (
     workflow_pause,
     workflow_resume,
     workflow_cancel,
+    workflow_retry,
     read_workflows,
     read_workflow_steps,
     read_workflow_statistics,
@@ -107,6 +108,11 @@ async def api_resume_workflow(workflow_code: str):
 @router.post("/{workflow_code}/cancel")
 async def api_cancel_workflow(workflow_code: str):
     return workflow_cancel(workflow_code)
+
+
+@router.post("/{workflow_code}/retry")
+async def api_retry_workflow(workflow_code: str):
+    return await workflow_retry(workflow_code)
 
 
 @router.post("/{workflow_code}/running")

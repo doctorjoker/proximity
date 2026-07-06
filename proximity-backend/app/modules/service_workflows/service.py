@@ -2,6 +2,7 @@ from .business_repository import list_business_operations
 from .repository import (
     create_workflow,
     next_workflow_code,
+    retry_workflow,
     get_workflow,
     update_workflow_status,
     pause_workflow,
@@ -114,10 +115,86 @@ async def start_workflow(
     }
 
 
+async def workflow_retry(workflow_code: str):
+    original = get_workflow(workflow_code)
+
+    if not original:
+        return {
+            "success": False,
+            "reason": "WORKFLOW_NOT_FOUND",
+            "workflow_code": workflow_code,
+        }
+
+    child = retry_workflow(workflow_code)
+
+    if not child:
+        return {
+            "success": False,
+            "reason": "WORKFLOW_RETRY_NOT_CREATED",
+            "workflow_code": workflow_code,
+        }
+
+    record_event(
+        workflow_code=workflow_code,
+        event_type="WORKFLOW_RETRIED",
+        event_status="SUCCESS",
+        title="Workflow retried",
+        description=f"Created retry workflow {child['workflow_code']}",
+        metadata={
+            "retry_workflow_code": child["workflow_code"],
+        },
+    )
+
+    record_event(
+        workflow_code=child["workflow_code"],
+        event_type="WORKFLOW_RETRY_CREATED",
+        event_status="SUCCESS",
+        title="Retry workflow created",
+        description=f"Retry created from {workflow_code}",
+        metadata={
+            "parent_workflow_code": workflow_code,
+        },
+    )
+
+    payload = child.get("payload") or {}
+
+    context = {
+        "service_code": child["service_code"],
+        **payload,
+    }
+
+    if "acs_device_id" not in context and child.get("acs_device_id"):
+        context["acs_device_id"] = child["acs_device_id"]
+
+    from .executor import WorkflowExecutor
+
+    executor = WorkflowExecutor()
+
+    execution = await executor.execute(
+        workflow_type=child["workflow_type"],
+        workflow_code=child["workflow_code"],
+        context=context,
+    )
+
+    return {
+        "success": True,
+        "original_workflow": original,
+        "retry_workflow": child,
+        "execution": execution,
+    }
+
+
 def read_workflow_details(workflow_code: str):
     workflow = get_workflow(workflow_code)
     steps = get_workflow_steps(workflow_code)
     events = list_events(workflow_code)
+
+    business_item = None
+
+    for item in list_business_operations(200):
+        if item.get("workflow_code") == workflow_code:
+            business_item = item
+            break
 
     status = workflow["status"] if workflow else None
 
@@ -130,6 +207,10 @@ def read_workflow_details(workflow_code: str):
 
     return {
         "workflow": workflow,
+        "customer": (business_item or {}).get("customer"),
+        "service": (business_item or {}).get("service"),
+        "device": (business_item or {}).get("device"),
+        "operation": business_item,
         "steps": steps,
         "events": events,
         "controls": controls,

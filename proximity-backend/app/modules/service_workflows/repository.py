@@ -57,6 +57,25 @@ def next_workflow_code():
             return f"WF-{value:06d}"
 
 
+def retry_workflow(workflow_code: str, started_by: str = "PROXIMITY"):
+    original = get_workflow(workflow_code)
+
+    if not original:
+        return None
+
+    new_workflow_code = next_workflow_code()
+
+    return create_workflow(
+        workflow_code=new_workflow_code,
+        workflow_type=original["workflow_type"],
+        service_code=original["service_code"],
+        acs_device_id=original["acs_device_id"],
+        payload=original.get("payload") or {},
+        started_by=started_by,
+        parent_workflow_code=workflow_code,
+    )
+
+
 def update_workflow_status(
     workflow_code: str,
     status: str,
