@@ -17,6 +17,8 @@ from .repository import (
     get_workflow_steps,
 )
 
+from .queue_repository import enqueue_workflow
+
 from .operations_repository import (
     get_workflow_statistics,
     list_queue,
@@ -88,30 +90,26 @@ async def start_workflow(
         description=f"{workflow_type} accepted by workflow engine",
     )
 
-    context = {
-        "service_code": service_code,
-        **payload,
-    }
-
-    if acs_device_id is not None:
-        context["acs_device_id"] = acs_device_id
-
-    if "acs_device_id" not in context and effective_acs_device_id is not None:
-        context["acs_device_id"] = effective_acs_device_id
-
-    from .executor import WorkflowExecutor
-
-    executor = WorkflowExecutor()
-
-    execution = await executor.execute(
-        workflow_type=workflow_type,
+    queue_item = enqueue_workflow(
         workflow_code=workflow_code,
-        context=context,
+    )
+
+    record_event(
+        workflow_code=workflow_code,
+        event_type="WORKFLOW_QUEUED",
+        event_status="SUCCESS",
+        title="Workflow queued",
+        description="Workflow queued for asynchronous execution",
+        metadata={
+            "queue_id": str(queue_item["id"]) if queue_item else None,
+        },
     )
 
     return {
+        "success": True,
+        "status": "QUEUED",
         "workflow": workflow,
-        "execution": execution,
+        "queue": queue_item,
     }
 
 
@@ -156,31 +154,28 @@ async def workflow_retry(workflow_code: str):
         },
     )
 
-    payload = child.get("payload") or {}
-
-    context = {
-        "service_code": child["service_code"],
-        **payload,
-    }
-
-    if "acs_device_id" not in context and child.get("acs_device_id"):
-        context["acs_device_id"] = child["acs_device_id"]
-
-    from .executor import WorkflowExecutor
-
-    executor = WorkflowExecutor()
-
-    execution = await executor.execute(
-        workflow_type=child["workflow_type"],
+    queue_item = enqueue_workflow(
         workflow_code=child["workflow_code"],
-        context=context,
+    )
+
+    record_event(
+        workflow_code=child["workflow_code"],
+        event_type="WORKFLOW_QUEUED",
+        event_status="SUCCESS",
+        title="Workflow queued",
+        description="Retry workflow queued for asynchronous execution",
+        metadata={
+            "queue_id": str(queue_item["id"]) if queue_item else None,
+            "parent_workflow_code": workflow_code,
+        },
     )
 
     return {
         "success": True,
+        "status": "QUEUED",
         "original_workflow": original,
         "retry_workflow": child,
-        "execution": execution,
+        "queue": queue_item,
     }
 
 
@@ -202,7 +197,7 @@ def read_workflow_details(workflow_code: str):
         "can_pause": status == "RUNNING",
         "can_resume": status == "PAUSED",
         "can_cancel": status in ["CREATED", "RUNNING", "PAUSED", "FAILED"],
-        "can_retry": status == "FAILED",
+        "can_retry": status in ["FAILED", "CANCELLED"],
     }
 
     return {

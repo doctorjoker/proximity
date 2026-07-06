@@ -19,6 +19,7 @@ logger = logging.getLogger("workflow-worker")
 
 
 async def worker_loop():
+    logger.info("Recovering interrupted workflows...")
 
     recovered = recover_running_workflows()
 
@@ -30,7 +31,6 @@ async def worker_loop():
     logger.info("Workflow Worker started")
 
     while True:
-
         try:
             result = await schedule_next_workflow()
 
@@ -40,15 +40,27 @@ async def worker_loop():
                     result.get("workflow_code"),
                 )
 
+                # Se c'è ancora lavoro in coda,
+                # processa subito il prossimo workflow.
+                continue
+
         except Exception:
             logger.exception(
                 "Workflow execution failed"
             )
 
+            # Evita loop serrati in caso di errore.
+            await asyncio.sleep(2)
+
+        # Nessun workflow disponibile.
         await asyncio.sleep(1)
 
 
-if __name__ == "__main__":
+def main():
     asyncio.run(
         worker_loop()
     )
+
+
+if __name__ == "__main__":
+    main()

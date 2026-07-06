@@ -68,11 +68,19 @@ async def schedule_next_workflow():
         )
         return None
 
+    payload = workflow.get("payload") or {}
+
     context = {
         "service_code": workflow["service_code"],
-        "old_acs_device_id": workflow["payload"].get("old_device"),
-        "new_acs_device_id": workflow["payload"].get("new_device"),
+        **payload,
     }
+
+    if (
+        "acs_device_id" not in context
+        and workflow.get("acs_device_id")
+    ):
+        context["acs_device_id"] = workflow["acs_device_id"]
+    
     record_event(
         workflow_code=workflow["workflow_code"],
         event_type="WORKFLOW_RUNNING",
