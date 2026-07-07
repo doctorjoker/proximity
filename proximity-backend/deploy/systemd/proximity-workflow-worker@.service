@@ -1,0 +1,23 @@
+[Unit]
+Description=Proximity Workflow Worker %i
+After=network.target
+
+[Service]
+Type=simple
+
+User=spnadmin
+Group=spnadmin
+
+WorkingDirectory=/opt/proximity/proximity-backend
+
+EnvironmentFile=/opt/proximity/proximity-backend/.env
+Environment=WORKFLOW_WORKER_ID=PROXIMITY-WORKER-%i
+
+ExecStart=/opt/proximity/proximity-backend/venv/bin/python \
+-m app.modules.service_workflows.worker
+
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
