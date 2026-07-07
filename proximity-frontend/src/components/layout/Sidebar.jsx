@@ -18,6 +18,7 @@ import {
   Memory,
   Settings,
   WifiTethering,
+  AccountTree,
 } from "@mui/icons-material";
 
 import { Link, useLocation } from "react-router-dom";
@@ -30,9 +31,9 @@ const items = [
     icon: <Dashboard />,
   },
   {
-    label: "Operations",
-    path: "/workflow-operations",
-    icon: <Engineering />,
+    label: "Procedure Automatiche",
+    path: "/procedures",
+    icon: <AccountTree />,
     badge: 3,
   },
   {

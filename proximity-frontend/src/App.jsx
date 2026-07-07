@@ -5,6 +5,11 @@ import CustomerCareDashboard from "./pages/CustomerCareDashboard";
 import SuspendedPortal from "./pages/SuspendedPortal";
 import WorkflowOperationsCenter from "./pages/WorkflowOperationsCenter";
 
+import ProcedureLibrary from "./pages/procedures/ProcedureLibrary";
+import ProcedureDetails from "./pages/procedures/ProcedureDetails";
+import ProcedureVersions from "./pages/procedures/ProcedureVersions";
+import ProcedureEditor from "./pages/procedures/ProcedureEditor";
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -13,6 +18,20 @@ export default function App() {
         <Route path="/customer-care" element={<CustomerCareDashboard />} />
         <Route path="/workflow-operations" element={<WorkflowOperationsCenter />} />
         <Route path="/suspended" element={<SuspendedPortal />} />
+
+        <Route path="/procedures" element={<ProcedureLibrary />} />
+        <Route
+          path="/procedures/:definitionCode"
+          element={<ProcedureDetails />}
+        />
+        <Route
+          path="/procedures/:definitionCode/versions"
+          element={<ProcedureVersions />}
+        />
+        <Route
+          path="/procedures/:definitionCode/editor"
+          element={<ProcedureEditor />}
+        />
       </Routes>
     </BrowserRouter>
   );
