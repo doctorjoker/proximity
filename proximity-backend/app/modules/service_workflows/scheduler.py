@@ -8,7 +8,10 @@ from app.modules.service_workflows.queue_repository import (
 )
 from app.modules.service_workflows.service import read_workflow
 from app.modules.service_workflows.service import record_event
-
+from app.modules.service_workflows.lock_repository import (
+    acquire_lock,
+    release_locks,
+)
 
 DEFAULT_RETRY_POLICY = {
     "max_retry": 3,
@@ -161,6 +164,52 @@ async def schedule_next_workflow():
     ):
         context["acs_device_id"] = workflow["acs_device_id"]
 
+    service_lock = acquire_lock(
+        workflow_code=workflow["workflow_code"],
+        resource_type="SERVICE",
+        resource_id=workflow["service_code"],
+    )
+
+    if not service_lock["success"]:
+        record_event(
+            workflow_code=workflow["workflow_code"],
+            event_type="WORKFLOW_LOCKED",
+            event_status="WAITING",
+            title="Workflow waiting",
+            description="Service is already locked",
+            worker_name="PROXIMITY-WORKER",
+        )
+
+        _reschedule_or_fail(
+            queue_item=queue_item,
+            workflow=workflow,
+            error="RESOURCE_LOCKED",
+        )
+
+        return {
+            "success": False,
+            "reason": "RESOURCE_LOCKED",
+            "workflow_code": workflow["workflow_code"],
+        }
+
+    lock_acquired = service_lock["success"]
+
+    record_event(
+        workflow_code=workflow["workflow_code"],
+        event_type="WORKFLOW_LOCK_ACQUIRED",
+        event_status="SUCCESS",
+        title="Lock acquired",
+        description=(
+            f"SERVICE {workflow['service_code']} locked "
+            "for workflow execution"
+        ),
+        worker_name="PROXIMITY-WORKER",
+        metadata={
+            "resource_type": "SERVICE",
+            "resource_id": workflow["service_code"],
+        },
+    )
+
     record_event(
         workflow_code=workflow["workflow_code"],
         event_type="WORKFLOW_RUNNING",
@@ -231,3 +280,25 @@ async def schedule_next_workflow():
             error=str(exc),
         )
         raise
+
+    finally:
+
+        if lock_acquired:
+            release_locks(
+                workflow["workflow_code"],
+            )
+
+            record_event(
+                workflow_code=workflow["workflow_code"],
+                event_type="WORKFLOW_LOCK_RELEASED",
+                event_status="SUCCESS",
+                title="Lock released",
+                description=(
+                    f"SERVICE {workflow['service_code']} unlocked"
+                ),
+                worker_name="PROXIMITY-WORKER",
+                metadata={
+                    "resource_type": "SERVICE",
+                    "resource_id": workflow["service_code"],
+                },
+            )
