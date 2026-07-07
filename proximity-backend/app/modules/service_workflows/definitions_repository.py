@@ -226,3 +226,34 @@ def publish_definition_version(
             )
 
             return cur.fetchone()
+
+def get_definition_version(
+    definition_code: str,
+    version: int,
+):
+    with get_conn() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor,
+        ) as cur:
+
+            cur.execute(
+                """
+                SELECT
+                    definition_code,
+                    version,
+                    status,
+                    definition_json,
+                    published_at,
+                    created_at,
+                    updated_at
+                FROM workflow_definition_versions
+                WHERE definition_code = %s
+                  AND version = %s
+                """,
+                (
+                    definition_code,
+                    version,
+                ),
+            )
+
+            return cur.fetchone()

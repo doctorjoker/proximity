@@ -31,6 +31,7 @@ from .service import (
     create_workflow_definition,
     create_workflow_definition_version,
     publish_workflow_definition,
+    validate_workflow_definition,
 )
 
 router = APIRouter(
@@ -205,4 +206,12 @@ async def api_publish_definition(
     return publish_workflow_definition(
         definition_code=definition_code,
         version=request.version,
+    )
+
+@router.post("/definitions/{definition_code}/validate")
+async def api_validate_definition(
+    definition_code: str,
+):
+    return validate_workflow_definition(
+        definition_code,
     )

@@ -37,7 +37,11 @@ from .definitions_repository import (
     create_definition,
     create_definition_version,
     publish_definition_version,
+    get_published_definition,
+    get_definition_version,
 )
+
+from .definition_validator import validate_definition
 
 def record_event(
     workflow_code: str,
@@ -407,7 +411,61 @@ def publish_workflow_definition(
     definition_code: str,
     version: int,
 ):
-    return publish_definition_version(
+    definition_version = get_definition_version(
         definition_code=definition_code,
         version=version,
+    )
+
+    if definition_version is None:
+        return {
+            "success": False,
+            "reason": "DEFINITION_VERSION_NOT_FOUND",
+            "definition_code": definition_code,
+            "version": version,
+        }
+
+    validation = validate_definition(
+        definition_version["definition_json"],
+    )
+
+    if not validation["valid"]:
+        return {
+            "success": False,
+            "reason": "DEFINITION_VALIDATION_FAILED",
+            "definition_code": definition_code,
+            "version": version,
+            "validation": validation,
+        }
+
+    published = publish_definition_version(
+        definition_code=definition_code,
+        version=version,
+    )
+
+    return {
+        "success": True,
+        "definition": published,
+        "validation": validation,
+    }
+def validate_workflow_definition(
+    definition_code: str,
+):
+    definition = get_published_definition(
+        definition_code,
+    )
+
+    if definition is None:
+        return {
+            "valid": False,
+            "errors": [
+                {
+                    "code": "DEFINITION_NOT_FOUND",
+                    "message": f"No published definition for '{definition_code}'",
+                }
+            ],
+            "warnings": [],
+        }
+
+    return validate_definition(
+        definition["definition_json"],
     )
