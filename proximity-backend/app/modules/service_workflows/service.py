@@ -30,6 +30,14 @@ from .events_repository import (
     list_events,
 )
 
+from .definitions_repository import (
+    list_definitions,
+    get_definition,
+    list_definition_versions,
+    create_definition,
+    create_definition_version,
+    publish_definition_version,
+)
 
 def record_event(
     workflow_code: str,
@@ -346,3 +354,60 @@ def get_business_dashboard(limit: int = 50):
     return {
         "items": list_business_operations(limit),
     }
+
+def read_workflow_definitions():
+    return {
+        "items": list_definitions(),
+    }
+
+
+def read_workflow_definition(
+    definition_code: str,
+):
+    return get_definition(
+        definition_code,
+    )
+
+
+def read_workflow_definition_versions(
+    definition_code: str,
+):
+    return {
+        "definition_code": definition_code,
+        "items": list_definition_versions(
+            definition_code,
+        ),
+    }
+
+def create_workflow_definition(
+    definition_code: str,
+    name: str,
+    description: str | None = None,
+):
+    return create_definition(
+        definition_code=definition_code,
+        name=name,
+        description=description,
+    )
+
+
+def create_workflow_definition_version(
+    definition_code: str,
+    version: int,
+    definition_json: dict,
+):
+    return create_definition_version(
+        definition_code=definition_code,
+        version=version,
+        definition_json=definition_json,
+    )
+
+
+def publish_workflow_definition(
+    definition_code: str,
+    version: int,
+):
+    return publish_definition_version(
+        definition_code=definition_code,
+        version=version,
+    )

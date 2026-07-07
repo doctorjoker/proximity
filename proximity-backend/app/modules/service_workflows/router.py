@@ -1,6 +1,11 @@
 from fastapi import APIRouter
 
-from .schemas import WorkflowStartRequest
+from .schemas import (
+    WorkflowStartRequest,
+    WorkflowDefinitionCreateRequest,
+    WorkflowDefinitionVersionCreateRequest,
+    WorkflowDefinitionPublishRequest,
+)
 
 from .service import (
     start_workflow,
@@ -20,13 +25,18 @@ from .service import (
     read_dashboard,
     read_workflow_timeline,
     get_business_dashboard,
+    read_workflow_definitions,
+    read_workflow_definition,
+    read_workflow_definition_versions,
+    create_workflow_definition,
+    create_workflow_definition_version,
+    publish_workflow_definition,
 )
 
 router = APIRouter(
     prefix="/api/v1/service-workflows",
     tags=["Service Workflows"],
 )
-
 
 @router.post("/start")
 async def api_start_workflow(
@@ -56,6 +66,28 @@ async def api_dashboard(limit: int = 20):
 def business_dashboard(limit: int = 50):
     return get_business_dashboard(limit)
 
+
+@router.get("/definitions")
+async def api_workflow_definitions():
+    return read_workflow_definitions()
+
+
+@router.get("/definitions/{definition_code}")
+async def api_workflow_definition(
+    definition_code: str,
+):
+    return read_workflow_definition(
+        definition_code,
+    )
+
+
+@router.get("/definitions/{definition_code}/versions")
+async def api_workflow_definition_versions(
+    definition_code: str,
+):
+    return read_workflow_definition_versions(
+        definition_code,
+    )
 
 @router.get("")
 async def api_list_workflows(limit: int = 50):
@@ -140,4 +172,37 @@ async def api_fail(workflow_code: str):
         workflow_code,
         "TIMEOUT",
         "Router did not appear in ACS",
+    )
+
+@router.post("/definitions")
+async def api_create_definition(
+    request: WorkflowDefinitionCreateRequest,
+):
+    return create_workflow_definition(
+        definition_code=request.definition_code,
+        name=request.name,
+        description=request.description,
+    )
+
+
+@router.post("/definitions/{definition_code}/versions")
+async def api_create_definition_version(
+    definition_code: str,
+    request: WorkflowDefinitionVersionCreateRequest,
+):
+    return create_workflow_definition_version(
+        definition_code=definition_code,
+        version=request.version,
+        definition_json=request.definition_json,
+    )
+
+
+@router.post("/definitions/{definition_code}/publish")
+async def api_publish_definition(
+    definition_code: str,
+    request: WorkflowDefinitionPublishRequest,
+):
+    return publish_workflow_definition(
+        definition_code=definition_code,
+        version=request.version,
     )
