@@ -9,6 +9,8 @@ from app.modules.service_workflows.queue_repository import (
     recover_running_workflows,
 )
 
+from app.modules.service_workflows.worker_identity import WORKER_ID
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,15 +30,20 @@ async def worker_loop():
         len(recovered),
     )
 
-    logger.info("Workflow Worker started")
+    logger.info(
+        "Workflow Worker %s started",
+        WORKER_ID,
+    )
 
     while True:
+
         try:
             result = await schedule_next_workflow()
 
             if result is not None:
                 logger.info(
-                    "Workflow processed: %s",
+                    "[%s] Workflow processed: %s",
+                    WORKER_ID,
                     result.get("workflow_code"),
                 )
 
