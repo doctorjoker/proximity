@@ -9,8 +9,35 @@ from app.modules.service_workflows.queue_repository import (
 from app.modules.service_workflows.service import read_workflow
 from app.modules.service_workflows.service import record_event
 
-MAX_RETRY_COUNT = 3
-RETRY_DELAY_SECONDS = 30
+
+DEFAULT_RETRY_POLICY = {
+    "max_retry": 3,
+    "delay_seconds": 30,
+}
+
+WORKFLOW_RETRY_POLICY = {
+    "FIRST_SERVICE_PROVISIONING": {
+        "max_retry": 0,
+        "delay_seconds": 0,
+    },
+    "ROUTER_REPLACEMENT": {
+        "max_retry": 2,
+        "delay_seconds": 15,
+    },
+    "FIRMWARE_UPGRADE": {
+        "max_retry": 5,
+        "delay_seconds": 120,
+    },
+}
+
+NON_RETRYABLE_ERRORS = {
+    "DEVICE_NOT_ASSIGNED",
+    "PROVISIONING_DISABLED",
+    "DEVICE_NOT_ACTIVE",
+    "NOT_AUTHORIZED",
+    "VALIDATION_FAILED",
+    "WORKFLOW_NOT_FOUND",
+}
 
 executor = WorkflowExecutor()
 
@@ -31,23 +58,75 @@ async def schedule_workflow_execution(
     }
 
 
-def _should_retry(queue_item: dict) -> bool:
-    return queue_item.get("retry_count", 0) < MAX_RETRY_COUNT
+def _retry_policy_for(workflow: dict | None):
+    if not workflow:
+        return DEFAULT_RETRY_POLICY
+
+    return WORKFLOW_RETRY_POLICY.get(
+        workflow.get("workflow_type"),
+        DEFAULT_RETRY_POLICY,
+    )
+
+
+def _is_retryable_error(error: str | None) -> bool:
+    if not error:
+        return True
+
+    return error not in NON_RETRYABLE_ERRORS
+
+
+def _should_retry(
+    queue_item: dict,
+    workflow: dict | None,
+    error: str | None,
+) -> bool:
+    if not _is_retryable_error(error):
+        return False
+
+    policy = _retry_policy_for(workflow)
+
+    return queue_item.get("retry_count", 0) < policy["max_retry"]
 
 
 def _reschedule_or_fail(
     queue_item: dict,
+    workflow: dict | None,
     error: str,
 ):
-    if _should_retry(queue_item):
+    policy = _retry_policy_for(workflow)
+
+    if _should_retry(
+        queue_item=queue_item,
+        workflow=workflow,
+        error=error,
+    ):
         return reschedule_queue_item(
             queue_item["id"],
-            delay_seconds=RETRY_DELAY_SECONDS,
+            delay_seconds=policy["delay_seconds"],
         )
 
     return mark_queue_failed(
         queue_item["id"],
         error,
+    )
+
+
+def _failure_reason(result: dict):
+    result_payload = result.get("result")
+
+    if isinstance(result_payload, dict):
+        return (
+            result_payload.get("reason")
+            or result_payload.get("state")
+            or result.get("failed_step")
+            or result.get("error")
+            or "WORKFLOW_FAILED"
+        )
+
+    return (
+        result.get("error")
+        or result.get("failed_step")
+        or "WORKFLOW_FAILED"
     )
 
 
@@ -63,8 +142,9 @@ async def schedule_next_workflow():
 
     if workflow is None:
         _reschedule_or_fail(
-            queue_item,
-            "WORKFLOW_NOT_FOUND",
+            queue_item=queue_item,
+            workflow=None,
+            error="WORKFLOW_NOT_FOUND",
         )
         return None
 
@@ -80,7 +160,7 @@ async def schedule_next_workflow():
         and workflow.get("acs_device_id")
     ):
         context["acs_device_id"] = workflow["acs_device_id"]
-    
+
     record_event(
         workflow_code=workflow["workflow_code"],
         event_type="WORKFLOW_RUNNING",
@@ -89,6 +169,7 @@ async def schedule_next_workflow():
         description="Worker started workflow execution",
         worker_name="PROXIMITY-WORKER",
     )
+
     try:
         result = await executor.execute(
             workflow_type=workflow["workflow_type"],
@@ -97,11 +178,7 @@ async def schedule_next_workflow():
         )
 
         if result.get("success") is False:
-            failure_reason = (
-                result.get("error")
-                or result.get("failed_step")
-                or "WORKFLOW_FAILED"
-            )
+            failure_reason = _failure_reason(result)
 
             record_event(
                 workflow_code=workflow["workflow_code"],
@@ -114,8 +191,9 @@ async def schedule_next_workflow():
             )
 
             _reschedule_or_fail(
-                queue_item,
-                failure_reason,
+                queue_item=queue_item,
+                workflow=workflow,
+                error=failure_reason,
             )
         else:
             record_event(
@@ -148,7 +226,8 @@ async def schedule_next_workflow():
         )
 
         _reschedule_or_fail(
-            queue_item,
-            str(exc),
+            queue_item=queue_item,
+            workflow=workflow,
+            error=str(exc),
         )
         raise
