@@ -257,3 +257,40 @@ def get_definition_version(
             )
 
             return cur.fetchone()
+
+def clone_definition_version(
+    definition_code: str,
+    source_version: int,
+    target_version: int,
+):
+    with get_conn() as conn:
+        with conn.cursor(
+            cursor_factory=psycopg2.extras.RealDictCursor,
+        ) as cur:
+            cur.execute(
+                """
+                INSERT INTO workflow_definition_versions
+                (
+                    definition_code,
+                    version,
+                    status,
+                    definition_json
+                )
+                SELECT
+                    definition_code,
+                    %s,
+                    'DRAFT',
+                    definition_json
+                FROM workflow_definition_versions
+                WHERE definition_code = %s
+                  AND version = %s
+                RETURNING *
+                """,
+                (
+                    target_version,
+                    definition_code,
+                    source_version,
+                ),
+            )
+
+            return cur.fetchone()

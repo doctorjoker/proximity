@@ -22,3 +22,7 @@ class WorkflowDefinitionVersionCreateRequest(BaseModel):
 
 class WorkflowDefinitionPublishRequest(BaseModel):
     version: int
+
+class WorkflowDefinitionCloneRequest(BaseModel):
+    source_version: int
+    target_version: int

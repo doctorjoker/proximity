@@ -5,6 +5,7 @@ from .schemas import (
     WorkflowDefinitionCreateRequest,
     WorkflowDefinitionVersionCreateRequest,
     WorkflowDefinitionPublishRequest,
+    WorkflowDefinitionCloneRequest,
 )
 
 from .service import (
@@ -32,6 +33,7 @@ from .service import (
     create_workflow_definition_version,
     publish_workflow_definition,
     validate_workflow_definition,
+    clone_workflow_definition_version,
 )
 
 router = APIRouter(
@@ -214,4 +216,15 @@ async def api_validate_definition(
 ):
     return validate_workflow_definition(
         definition_code,
+    )
+
+@router.post("/definitions/{definition_code}/clone")
+async def api_clone_definition_version(
+    definition_code: str,
+    request: WorkflowDefinitionCloneRequest,
+):
+    return clone_workflow_definition_version(
+        definition_code=definition_code,
+        source_version=request.source_version,
+        target_version=request.target_version,
     )

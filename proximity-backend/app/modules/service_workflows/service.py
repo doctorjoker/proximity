@@ -39,6 +39,7 @@ from .definitions_repository import (
     publish_definition_version,
     get_published_definition,
     get_definition_version,
+    clone_definition_version,
 )
 
 from .definition_validator import validate_definition
@@ -469,3 +470,28 @@ def validate_workflow_definition(
     return validate_definition(
         definition["definition_json"],
     )
+
+def clone_workflow_definition_version(
+    definition_code: str,
+    source_version: int,
+    target_version: int,
+):
+    cloned = clone_definition_version(
+        definition_code=definition_code,
+        source_version=source_version,
+        target_version=target_version,
+    )
+
+    if cloned is None:
+        return {
+            "success": False,
+            "reason": "SOURCE_VERSION_NOT_FOUND",
+            "definition_code": definition_code,
+            "source_version": source_version,
+            "target_version": target_version,
+        }
+
+    return {
+        "success": True,
+        "definition": cloned,
+    }
