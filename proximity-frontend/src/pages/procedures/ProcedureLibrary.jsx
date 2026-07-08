@@ -45,17 +45,33 @@ const FILTERS = [
 ];
 
 function statusLabel(status) {
-  if (status === "PUBLISHED") return "Attiva";
-  if (status === "DRAFT") return "Bozza";
-  if (status === "DEPRECATED") return "Storica";
+  if (isActiveStatus(status)) return "Attiva";
+  if (isDraftStatus(status)) return "Bozza";
+  if (isDeprecatedStatus(status)) return "Storica";
   return status || "-";
 }
 
 function statusColor(status) {
-  if (status === "PUBLISHED") return "success";
-  if (status === "DRAFT") return "warning";
-  if (status === "DEPRECATED") return "default";
+  if (isActiveStatus(status)) return "success";
+  if (isDraftStatus(status)) return "warning";
+  if (isDeprecatedStatus(status)) return "default";
   return "default";
+}
+
+function procedureCode(procedure) {
+  return procedure?.code || procedure?.definition_code || procedure?.procedure_code || "";
+}
+
+function isActiveStatus(status) {
+  return status === "ACTIVE" || status === "PUBLISHED" || status === "Attiva";
+}
+
+function isDraftStatus(status) {
+  return status === "DRAFT" || status === "Bozza";
+}
+
+function isDeprecatedStatus(status) {
+  return status === "DEPRECATED" || status === "HISTORICAL" || status === "Storica";
 }
 
 function operatorName(code, fallback) {
@@ -63,6 +79,7 @@ function operatorName(code, fallback) {
     FIRST_SERVICE_PROVISIONING: "Prima attivazione servizio",
     ROUTER_REPLACEMENT: "Sostituzione router",
     DEVICE_REBOOT: "Riavvio router",
+    "PROC-ROUTER-REPLACEMENT": "Sostituzione router cliente",
   };
 
   return names[code] || fallback || code;
@@ -75,34 +92,36 @@ function operatorDescription(procedure) {
     ROUTER_REPLACEMENT:
       "Procedura per sostituzione router e riallineamento configurazione.",
     DEVICE_REBOOT: "Riavvio remoto controllato del router cliente.",
+    "PROC-ROUTER-REPLACEMENT":
+      "Procedura automatica per sostituzione router cliente con provisioning ACS e verifica runtime.",
   };
 
   return (
-    descriptions[procedure.definition_code]
+    descriptions[procedureCode(procedure)]
     || procedure.description
     || "Nessuna descrizione disponibile."
   );
 }
 
 function getVersions(procedure, versionsByCode) {
-  return versionsByCode[procedure.definition_code] || [];
+  return versionsByCode[procedureCode(procedure)] || [];
 }
 
 function getActiveVersion(procedure, versionsByCode) {
   return getVersions(procedure, versionsByCode).find(
-    (version) => version.status === "PUBLISHED",
+    (version) => isActiveStatus(version.status),
   );
 }
 
 function getDraftVersion(procedure, versionsByCode) {
   return getVersions(procedure, versionsByCode).find(
-    (version) => version.status === "DRAFT",
+    (version) => isDraftStatus(version.status),
   );
 }
 
 function getDeprecatedVersions(procedure, versionsByCode) {
   return getVersions(procedure, versionsByCode).filter(
-    (version) => version.status === "DEPRECATED",
+    (version) => isDeprecatedStatus(version.status),
   );
 }
 
@@ -431,7 +450,7 @@ function ProcedureCard({ procedure, versionsByCode }) {
 
               <Box>
                 <Typography sx={{ fontSize: 20, fontWeight: 950, lineHeight: 1.2 }}>
-                  {operatorName(procedure.definition_code, procedure.name)}
+                  {operatorName(procedureCode(procedure), procedure.name)}
                 </Typography>
 
                 <Typography
@@ -489,7 +508,7 @@ function ProcedureCard({ procedure, versionsByCode }) {
                 Fasi
               </Typography>
               <Typography sx={{ fontWeight: 950, mt: 0.2 }}>
-                {latestVersion?.steps_count || latestVersion?.steps?.length || "-"}
+                {latestVersion?.phase_count ?? latestVersion?.steps_count ?? latestVersion?.steps?.length ?? "-"}
               </Typography>
             </Grid>
 
@@ -512,9 +531,15 @@ function ProcedureCard({ procedure, versionsByCode }) {
               variant="outlined"
               startIcon={<PlayArrowIcon />}
               sx={{ borderRadius: 2.4, fontWeight: 900, textTransform: "none" }}
-              onClick={() =>
-                navigate(`/procedures/${procedure.definition_code}`)
-              }
+              onClick={() => {
+                const code = procedureCode(procedure);
+                const versionToOpen =
+                  procedure.draft_version ||
+                  procedure.active_version ||
+                  "v1.0";
+
+                navigate(`/procedures/${code}/versions/${versionToOpen}`);
+               }}
             >
               Apri
             </Button>
@@ -522,7 +547,7 @@ function ProcedureCard({ procedure, versionsByCode }) {
               variant="contained"
               sx={{ borderRadius: 2.4, fontWeight: 900, textTransform: "none" }}
               onClick={() =>
-                navigate(`/procedures/${procedure.definition_code}/versions`)
+                navigate(`/procedures/${procedureCode(procedure)}/versions`)
               }
             >
               Versioni
@@ -584,8 +609,8 @@ export default function ProcedureConsole() {
 
       await Promise.all(
         items.map(async (procedure) => {
-          const versionData = await listVersions(procedure.definition_code);
-          versions[procedure.definition_code] = versionData.items || [];
+          const versionData = await listVersions(procedureCode(procedure));
+          versions[procedureCode(procedure)] = versionData.items || [];
         }),
       );
 
@@ -617,7 +642,7 @@ export default function ProcedureConsole() {
       if (!value) return true;
 
       const name = operatorName(
-        procedure.definition_code,
+        procedureCode(procedure),
         procedure.name,
       ).toLowerCase();
 
@@ -626,7 +651,7 @@ export default function ProcedureConsole() {
       return (
         name.includes(value)
         || description.includes(value)
-        || procedure.definition_code.toLowerCase().includes(value)
+        || procedureCode(procedure).toLowerCase().includes(value)
       );
     });
   }, [procedures, versionsByCode, search, filter]);
@@ -666,7 +691,7 @@ export default function ProcedureConsole() {
           {!loading && !error && filteredProcedures.length > 0 && (
             <Grid container spacing={2.5} alignItems="stretch">
               {filteredProcedures.map((procedure) => (
-                <Grid key={procedure.definition_code} item xs={12} xl={6}>
+                <Grid key={procedureCode(procedure)} item xs={12} xl={6}>
                   <ProcedureCard
                     procedure={procedure}
                     versionsByCode={versionsByCode}

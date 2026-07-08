@@ -19,13 +19,13 @@ import {
   Stack,
   Switch,
   Tab,
-  Tabs,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  Tabs,
   TextField,
   Tooltip,
   Typography,
@@ -44,6 +44,12 @@ import SchemaIcon from "@mui/icons-material/Schema";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import TuneIcon from "@mui/icons-material/Tune";
 import VariablesIcon from "@mui/icons-material/DataObject";
+import {
+  listPhases,
+  createPhase,
+  updatePhase,
+  deletePhase,
+} from "../../services/phaseService";
 
 const runtimeConfig = [
   { label: "Timeout globale", value: "300s" },
@@ -63,7 +69,7 @@ function normalizeStatus(status) {
   if (status === "DRAFT") return "Bozza";
   if (status === "ACTIVE" || status === "PUBLISHED") return "Attiva";
   if (status === "READY") return "Pronta";
-  if (status === "DEPRECATED" || status === "HISTORICAL" || status === "ARCHIVED") return "Storica";
+  if (["DEPRECATED", "HISTORICAL", "ARCHIVED"].includes(status)) return "Storica";
   return status || "n/d";
 }
 
@@ -92,19 +98,47 @@ function mapPhase(item) {
   return {
     ...item,
     order: item.phase_order ?? item.order,
+    phase_order: item.phase_order ?? item.order,
     name: item.name || "Fase senza nome",
-    action: item.action || "n/d",
-    type: item.type || "Generic",
-    timeout: item.timeout || "n/d",
+    action: item.action || "",
+    type: item.type || "Validation",
+    timeout: item.timeout || "30s",
     retry: item.retry ?? 0,
     status: item.status || "READY",
-    description: item.description || "Fase operativa caricata dal backend Procedure Runtime.",
+    description: item.description || "",
     continueOnError: Boolean(item.continue_on_error),
-    successTransition: item.success_transition || "Fase successiva",
-    errorTransition: item.error_transition || "Interrompi procedura",
+    successTransition: item.success_transition || "",
+    errorTransition: item.error_transition || "",
     inputVariables: (item.input_variables || "").replaceAll("\\n", "\n"),
     outputVariables: (item.output_variables || "").replaceAll("\\n", "\n"),
   };
+}
+
+function toPhasePayload(phase) {
+  const valueOrNull = (value) => {
+    if (value === undefined || value === null) return null;
+    const stringValue = String(value);
+    return stringValue.trim() === "" ? null : stringValue;
+  };
+
+  const payload = {
+    phase_order: phase.phase_order || phase.order || undefined,
+    name: phase.name,
+    action: phase.action,
+    type: phase.type || "Validation",
+    timeout: phase.timeout || "30s",
+    retry: Number(phase.retry ?? 0),
+    status: phase.status || "READY",
+    description: valueOrNull(phase.description),
+    continue_on_error: Boolean(phase.continue_on_error ?? phase.continueOnError),
+    success_transition: valueOrNull(phase.success_transition ?? phase.successTransition),
+    error_transition: valueOrNull(phase.error_transition ?? phase.errorTransition),
+    input_variables: valueOrNull(phase.input_variables ?? phase.inputVariables),
+    output_variables: valueOrNull(phase.output_variables ?? phase.outputVariables),
+  };
+
+  if (!payload.phase_order) delete payload.phase_order;
+  return payload;
 }
 
 function mapVariable(item) {
@@ -157,7 +191,6 @@ function HeaderButton({ children, startIcon, variant = "outlined", onClick }) {
 }
 
 function SidebarSummary({ version, phasesCount, variableCount }) {
-  const status = normalizeStatus(version?.status);
   return (
     <Stack spacing={2}>
       <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 4 }}>
@@ -166,7 +199,7 @@ function SidebarSummary({ version, phasesCount, variableCount }) {
             <Typography variant="overline" color="text.secondary" fontWeight={900}>Versione</Typography>
             <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
               <Typography variant="h4" fontWeight={950}>{version?.version || "n/d"}</Typography>
-              <Chip size="small" label={status} color={statusChipColor(version?.status)} />
+              <Chip size="small" label={normalizeStatus(version?.status)} color={statusChipColor(version?.status)} />
             </Stack>
           </Box>
           <Divider />
@@ -193,29 +226,24 @@ function SidebarSummary({ version, phasesCount, variableCount }) {
   );
 }
 
-function PhaseEditorDrawer({ open, phase, onClose, onSave }) {
+function PhaseDrawer({ open, phase, onClose, onSave, onDelete, saving = false }) {
   const [draft, setDraft] = useState(null);
 
   useEffect(() => {
-    if (!phase) {
-      setDraft(null);
-      return;
-    }
-    setDraft({ ...phase });
+    setDraft(phase ? { ...phase } : null);
   }, [phase]);
 
   const updateDraft = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
-  const handleSave = () => draft && onSave(draft);
 
   return (
-    <Drawer anchor="right" open={open} onClose={onClose} PaperProps={{ sx: { width: { xs: "100%", sm: 520 }, maxWidth: "100%" } }}>
+    <Drawer anchor="right" open={open} onClose={onClose} PaperProps={{ sx: { width: { xs: "100%", sm: 540 }, maxWidth: "100%" } }}>
       <Stack sx={{ height: "100%" }}>
         <Box sx={{ p: 2.5, borderBottom: "1px solid", borderColor: "divider" }}>
           <Stack direction="row" justifyContent="space-between" spacing={2} alignItems="flex-start">
             <Box>
-              <Typography variant="overline" color="text.secondary" fontWeight={900}>Editor fase</Typography>
+              <Typography variant="overline" color="text.secondary" fontWeight={900}>{draft?.isNew ? "Nuova fase" : "Editor fase"}</Typography>
               <Typography variant="h5" fontWeight={950} sx={{ mt: 0.2 }}>{draft?.name || "Fase"}</Typography>
-              {draft && <Typography variant="body2" color="text.secondary">#{draft.order} · {draft.action}</Typography>}
+              {draft && <Typography variant="body2" color="text.secondary">#{draft.phase_order || draft.order} · {draft.action || "handler non impostato"}</Typography>}
             </Box>
             <IconButton onClick={onClose} size="small"><MoreVertIcon fontSize="small" /></IconButton>
           </Stack>
@@ -265,82 +293,22 @@ function PhaseEditorDrawer({ open, phase, onClose, onSave }) {
         )}
 
         <Box sx={{ p: 2, borderTop: "1px solid", borderColor: "divider" }}>
-          <Stack direction="row" spacing={1} justifyContent="flex-end">
-            <Button variant="outlined" onClick={onClose} sx={{ textTransform: "none", fontWeight: 800 }}>Annulla</Button>
-            <Button variant="contained" onClick={handleSave} sx={{ textTransform: "none", fontWeight: 850 }}>Salva fase</Button>
-          </Stack>
-        </Box>
-      </Stack>
-    </Drawer>
-  );
-}
-
-function VariableEditorDrawer({ open, variable, onClose, onSave, onDelete }) {
-  const [draft, setDraft] = useState(null);
-
-  useEffect(() => {
-    if (!variable) {
-      setDraft(null);
-      return;
-    }
-    setDraft({ ...variable });
-  }, [variable]);
-
-  const updateDraft = (field, value) => setDraft((current) => ({ ...current, [field]: value }));
-  const handleSave = () => draft && onSave(draft);
-
-  return (
-    <Drawer anchor="right" open={open} onClose={onClose} PaperProps={{ sx: { width: { xs: "100%", sm: 500 }, maxWidth: "100%" } }}>
-      <Stack sx={{ height: "100%" }}>
-        <Box sx={{ p: 2.5, borderBottom: "1px solid", borderColor: "divider" }}>
-          <Stack direction="row" justifyContent="space-between" spacing={2} alignItems="flex-start">
-            <Box>
-              <Typography variant="overline" color="text.secondary" fontWeight={900}>Editor variabile</Typography>
-              <Typography variant="h5" fontWeight={950} sx={{ mt: 0.2 }}>{draft?.name || "Nuova variabile"}</Typography>
-              {draft && <Typography variant="body2" color="text.secondary">{draft.scope} · {draft.type}</Typography>}
-            </Box>
-            <IconButton onClick={onClose} size="small"><MoreVertIcon fontSize="small" /></IconButton>
-          </Stack>
-        </Box>
-
-        {draft && (
-          <Box sx={{ p: 2.5, overflow: "auto", flex: 1 }}>
-            <Stack spacing={2.2}>
-              <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                <Typography variant="subtitle1" fontWeight={900} gutterBottom>Definizione</Typography>
-                <Stack spacing={2}>
-                  <TextField label="Nome variabile" value={draft.name} onChange={(event) => updateDraft("name", event.target.value.toUpperCase())} fullWidth size="small" />
-                  <TextField select label="Scope" value={draft.scope} onChange={(event) => updateDraft("scope", event.target.value)} fullWidth size="small">
-                    {["Input", "Output", "Secret", "Costante"].map((scope) => <MenuItem key={scope} value={scope}>{scope}</MenuItem>)}
-                  </TextField>
-                  <TextField select label="Tipo" value={draft.type} onChange={(event) => updateDraft("type", event.target.value)} fullWidth size="small">
-                    {["string", "number", "boolean", "object", "array", "secret"].map((type) => <MenuItem key={type} value={type}>{type}</MenuItem>)}
-                  </TextField>
-                </Stack>
-              </Paper>
-
-              <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                <Typography variant="subtitle1" fontWeight={900} gutterBottom>Valori e validazione</Typography>
-                <Stack spacing={2}>
-                  <TextField label="Valore default" value={draft.defaultValue} onChange={(event) => updateDraft("defaultValue", event.target.value)} fullWidth size="small" />
-                  <FormControlLabel control={<Switch checked={Boolean(draft.required)} onChange={(event) => updateDraft("required", event.target.checked)} />} label="Variabile obbligatoria" />
-                </Stack>
-              </Paper>
-
-              <Paper variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-                <Typography variant="subtitle1" fontWeight={900} gutterBottom>Descrizione</Typography>
-                <TextField label="Descrizione operativa" value={draft.description} onChange={(event) => updateDraft("description", event.target.value)} fullWidth multiline minRows={4} size="small" />
-              </Paper>
-            </Stack>
-          </Box>
-        )}
-
-        <Box sx={{ p: 2, borderTop: "1px solid", borderColor: "divider" }}>
           <Stack direction="row" spacing={1} justifyContent="space-between">
-            <Button variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={() => draft && onDelete(draft)} sx={{ textTransform: "none", fontWeight: 800 }}>Elimina</Button>
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<DeleteIcon />}
+              onClick={() => draft && onDelete(draft)}
+              disabled={saving || !draft || draft.isNew}
+              sx={{ textTransform: "none", fontWeight: 800 }}
+            >
+              Elimina
+            </Button>
             <Stack direction="row" spacing={1}>
-              <Button variant="outlined" onClick={onClose} sx={{ textTransform: "none", fontWeight: 800 }}>Annulla</Button>
-              <Button variant="contained" onClick={handleSave} sx={{ textTransform: "none", fontWeight: 850 }}>Salva variabile</Button>
+              <Button variant="outlined" onClick={onClose} disabled={saving} sx={{ textTransform: "none", fontWeight: 800 }}>Annulla</Button>
+              <Button variant="contained" onClick={() => draft && onSave(draft)} disabled={saving || !draft?.name || !draft?.action} sx={{ textTransform: "none", fontWeight: 850 }}>
+                {saving ? "Salvataggio..." : "Salva fase"}
+              </Button>
             </Stack>
           </Stack>
         </Box>
@@ -387,55 +355,61 @@ function OverviewTab({ procedure, version, phases, variables }) {
   );
 }
 
-function PhasesDiagram({ phases, onEditPhase }) {
-  return (
-    <Paper variant="outlined" sx={{ p: 3, borderRadius: 4, background: "rgba(30,90,168,0.03)" }}>
-      <Stack alignItems="center" spacing={1.2}>
-        <Chip label="START" color="success" sx={{ fontWeight: 900 }} />
-        {phases.map((phase) => (
-          <Stack key={phase.id || phase.order} alignItems="center" spacing={1.2} sx={{ width: "100%" }}>
-            <Box sx={{ height: 22, width: 2, bgcolor: "divider" }} />
-            <Paper
-              variant="outlined"
-              onClick={() => onEditPhase(phase)}
-              sx={{ p: 2, borderRadius: 3, width: "min(100%, 520px)", borderColor: normalizeStatus(phase.status) === "Bozza" ? "warning.main" : "divider", backgroundColor: "background.paper", cursor: "pointer" }}
-            >
-              <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between">
-                <Box>
-                  <Typography fontWeight={900}>{phase.order}. {phase.name}</Typography>
-                  <Typography variant="body2" color="text.secondary">{phase.action}</Typography>
-                </Box>
-                <Chip size="small" label={phase.type} variant="outlined" />
-              </Stack>
-            </Paper>
-          </Stack>
-        ))}
-        <Box sx={{ height: 22, width: 2, bgcolor: "divider" }} />
-        <Chip label="END" color="primary" sx={{ fontWeight: 900 }} />
-      </Stack>
-    </Paper>
-  );
-}
-
-function PhasesTab({ phases, onEditPhase }) {
+function PhasesTab({ phases, onEditPhase, onCreatePhase }) {
   const [view, setView] = useState("list");
+
+  const handleDirectCreatePhase = (event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    if (typeof onCreatePhase === "function") {
+      onCreatePhase();
+    }
+  };
 
   return (
     <Stack spacing={2}>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ xs: "stretch", sm: "center" }} justifyContent="space-between">
         <Box>
           <Typography variant="h6" fontWeight={900}>Fasi procedura</Typography>
-          <Typography variant="body2" color="text.secondary">Sequenza operativa caricata dal backend Procedure Runtime.</Typography>
+          <Typography variant="body2" color="text.secondary">Sequenza operativa eseguita dal motore interno.</Typography>
         </Box>
         <Stack direction="row" spacing={1}>
           <Button variant={view === "list" ? "contained" : "outlined"} size="small" onClick={() => setView("list")} sx={{ textTransform: "none", fontWeight: 800 }}>Elenco</Button>
           <Button variant={view === "diagram" ? "contained" : "outlined"} size="small" onClick={() => setView("diagram")} sx={{ textTransform: "none", fontWeight: 800 }}>Diagramma</Button>
-          <Button variant="contained" size="small" startIcon={<AddIcon />} sx={{ textTransform: "none", fontWeight: 800 }}>Nuova fase</Button>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<AddIcon />}
+            onPointerDown={handleDirectCreatePhase}
+            sx={{ textTransform: "none", fontWeight: 800 }}
+          >
+            Nuova fase
+          </Button>
         </Stack>
       </Stack>
 
       {view === "diagram" ? (
-        <PhasesDiagram phases={phases} onEditPhase={onEditPhase} />
+        <Paper variant="outlined" sx={{ p: 3, borderRadius: 4, background: "rgba(30,90,168,0.03)" }}>
+          <Stack alignItems="center" spacing={1.2}>
+            <Chip label="START" color="success" sx={{ fontWeight: 900 }} />
+            {phases.map((phase) => (
+              <Stack key={phase.id ?? phase.phase_order} alignItems="center" spacing={1.2} sx={{ width: "100%" }}>
+                <Box sx={{ height: 22, width: 2, bgcolor: "divider" }} />
+                <Paper variant="outlined" onClick={() => onEditPhase(phase)} sx={{ cursor: "pointer", p: 2, borderRadius: 3, width: "min(100%,520px)", borderColor: phase.status === "DRAFT" ? "warning.main" : "divider" }}>
+                  <Stack direction="row" justifyContent="space-between" spacing={2} alignItems="center">
+                    <Box>
+                      <Typography fontWeight={900}>{phase.phase_order}. {phase.name}</Typography>
+                      <Typography variant="body2" color="text.secondary">{phase.action}</Typography>
+                    </Box>
+                    <Chip size="small" label={phase.type} variant="outlined" />
+                  </Stack>
+                </Paper>
+              </Stack>
+            ))}
+            <Box sx={{ height: 22, width: 2, bgcolor: "divider" }} />
+            <Chip label="END" color="primary" sx={{ fontWeight: 900 }} />
+          </Stack>
+        </Paper>
       ) : (
         <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 4 }}>
           <Table size="medium">
@@ -453,14 +427,14 @@ function PhasesTab({ phases, onEditPhase }) {
             </TableHead>
             <TableBody>
               {phases.map((phase) => (
-                <TableRow key={phase.id || phase.order} hover>
-                  <TableCell><Typography fontWeight={900}>{phase.order}</Typography></TableCell>
+                <TableRow key={phase.id ?? phase.phase_order} hover>
+                  <TableCell><Typography fontWeight={900}>{phase.phase_order}</Typography></TableCell>
                   <TableCell><Typography fontWeight={800}>{phase.name}</Typography></TableCell>
                   <TableCell><Typography variant="body2" color="text.secondary">{phase.action}</Typography></TableCell>
                   <TableCell><Chip size="small" label={phase.type} variant="outlined" /></TableCell>
                   <TableCell align="right">{phase.timeout}</TableCell>
                   <TableCell align="right">{phase.retry}</TableCell>
-                  <TableCell><Chip size="small" label={normalizeStatus(phase.status)} color={statusChipColor(phase.status)} variant={normalizeStatus(phase.status) === "Bozza" ? "outlined" : "filled"} /></TableCell>
+                  <TableCell><Chip size="small" label={normalizeStatus(phase.status)} color={statusChipColor(phase.status)} variant={phase.status === "DRAFT" ? "outlined" : "filled"} /></TableCell>
                   <TableCell align="right">
                     <Tooltip title="Modifica fase"><IconButton size="small" onClick={() => onEditPhase(phase)}><EditIcon fontSize="small" /></IconButton></Tooltip>
                     <Tooltip title="Altre azioni"><IconButton size="small"><MoreVertIcon fontSize="small" /></IconButton></Tooltip>
@@ -468,7 +442,9 @@ function PhasesTab({ phases, onEditPhase }) {
                 </TableRow>
               ))}
               {phases.length === 0 && (
-                <TableRow><TableCell colSpan={8}><Typography color="text.secondary" sx={{ py: 3, textAlign: "center" }}>Nessuna fase disponibile.</Typography></TableCell></TableRow>
+                <TableRow>
+                  <TableCell colSpan={8} align="center"><Typography color="text.secondary" sx={{ py: 3 }}>Nessuna fase disponibile.</Typography></TableCell>
+                </TableRow>
               )}
             </TableBody>
           </Table>
@@ -520,10 +496,7 @@ function VariablesTab({ items, onCreateVariable, onEditVariable, onDeleteVariabl
                 <TableBody>
                   {scopeItems.map((item) => (
                     <TableRow key={`${item.scope}-${item.name}`} hover>
-                      <TableCell>
-                        <Typography fontWeight={850}>{item.name}</Typography>
-                        {item.defaultValue && <Typography variant="caption" color="text.secondary">Default: {item.defaultValue}</Typography>}
-                      </TableCell>
+                      <TableCell><Typography fontWeight={850}>{item.name}</Typography>{item.defaultValue && <Typography variant="caption" color="text.secondary">Default: {item.defaultValue}</Typography>}</TableCell>
                       <TableCell>{item.type}</TableCell>
                       <TableCell>{item.required ? "Sì" : "No"}</TableCell>
                       <TableCell><Typography variant="body2" color="text.secondary">{item.description}</Typography></TableCell>
@@ -538,9 +511,7 @@ function VariablesTab({ items, onCreateVariable, onEditVariable, onDeleteVariabl
             </Paper>
           </Grid>
         ))}
-        {items.length === 0 && (
-          <Grid item xs={12}><Paper variant="outlined" sx={{ p: 3, borderRadius: 4, textAlign: "center" }}><Typography color="text.secondary">Nessuna variabile disponibile.</Typography></Paper></Grid>
-        )}
+        {items.length === 0 && <Grid item xs={12}><Paper variant="outlined" sx={{ p: 3, borderRadius: 4, textAlign: "center" }}><Typography color="text.secondary">Nessuna variabile disponibile.</Typography></Paper></Grid>}
       </Grid>
     </Stack>
   );
@@ -567,9 +538,7 @@ function TestTab({ procedure, version, phases }) {
   const [durationMs, setDurationMs] = useState(null);
   const [inputError, setInputError] = useState("");
 
-  useEffect(() => {
-    setTimeline(initialSteps);
-  }, [initialSteps]);
+  useEffect(() => setTimeline(initialSteps), [initialSteps]);
 
   const colors = { PENDING: "default", RUNNING: "warning", OK: "success", FAILED: "error" };
   const resetSimulation = () => {
@@ -716,41 +685,30 @@ export default function ProcedureVersionDetails() {
   const [error, setError] = useState(null);
   const [selectedPhase, setSelectedPhase] = useState(null);
   const [phaseDrawerOpen, setPhaseDrawerOpen] = useState(false);
+  const [phaseSaving, setPhaseSaving] = useState(false);
   const [selectedVariable, setSelectedVariable] = useState(null);
   const [variableDrawerOpen, setVariableDrawerOpen] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-
-    async function loadVersionDetail() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const response = await fetch(`/api/v1/procedures/${procedureCode}/versions/${versionParam}`);
-        if (!response.ok) {
-          throw new Error(`Errore caricamento dettaglio versione (${response.status})`);
-        }
-
-        const payload = await response.json();
-        if (!active) return;
-
-        setVersionData(payload.version || null);
-        setPhasesData(Array.isArray(payload.phases) ? payload.phases.map(mapPhase) : []);
-        setVariablesData(Array.isArray(payload.variables) ? payload.variables.map(mapVariable) : []);
-      } catch (err) {
-        if (!active) return;
-        setError(err.message || "Errore imprevisto durante il caricamento del dettaglio versione.");
-      } finally {
-        if (active) setLoading(false);
-      }
+  const loadVersionDetail = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/v1/procedures/${procedureCode}/versions/${versionParam}`);
+      if (!response.ok) throw new Error(`Errore caricamento dettaglio versione (${response.status})`);
+      const payload = await response.json();
+      setVersionData(payload.version || null);
+      setPhasesData(Array.isArray(payload.phases) ? payload.phases.map(mapPhase) : []);
+      setVariablesData(Array.isArray(payload.variables) ? payload.variables.map(mapVariable) : []);
+    } catch (err) {
+      setError(err.message || "Errore imprevisto durante il caricamento del dettaglio versione.");
+    } finally {
+      setLoading(false);
     }
+  };
 
+  useEffect(() => {
     loadVersionDetail();
-
-    return () => {
-      active = false;
-    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [procedureCode, versionParam]);
 
   const procedure = useMemo(() => ({
@@ -772,26 +730,91 @@ export default function ProcedureVersionDetails() {
     published_at: versionData?.published_at,
   }), [versionData, versionParam]);
 
+  const refreshPhases = async () => {
+    const response = await listPhases(procedure.code, version.version);
+    const items = Array.isArray(response.items) ? response.items : [];
+    setPhasesData(items.map(mapPhase));
+  };
+
+  const handleCreatePhase = () => {
+    setSelectedPhase({
+      isNew: true,
+      phase_order: phasesData.length + 1,
+      order: phasesData.length + 1,
+      name: "",
+      action: "",
+      type: "Validation",
+      timeout: "30s",
+      retry: 0,
+      status: "READY",
+      description: "",
+      continueOnError: false,
+      successTransition: "",
+      errorTransition: "",
+      inputVariables: "",
+      outputVariables: "",
+    });
+    setPhaseDrawerOpen(true);
+  };
+
   const handleEditPhase = (phase) => {
     setSelectedPhase(phase);
     setPhaseDrawerOpen(true);
   };
-  const handleClosePhaseDrawer = () => setPhaseDrawerOpen(false);
-  const handleSavePhase = (updatedPhase) => {
-    setPhasesData((current) => current.map((item) => (item.id === updatedPhase.id ? updatedPhase : item)));
-    setSelectedPhase(updatedPhase);
-    setPhaseDrawerOpen(false);
+
+  const handleClosePhaseDrawer = () => {
+    if (!phaseSaving) setPhaseDrawerOpen(false);
+  };
+
+  const handleSavePhase = async (updatedPhase) => {
+    setPhaseSaving(true);
+    try {
+      const payload = toPhasePayload(updatedPhase);
+      if (updatedPhase.isNew || !updatedPhase.id) {
+        await createPhase(procedure.code, version.version, payload);
+      } else {
+        await updatePhase(procedure.code, version.version, updatedPhase.id, payload);
+      }
+      await refreshPhases();
+      setSelectedPhase(null);
+      setPhaseDrawerOpen(false);
+      setError(null);
+    } catch (err) {
+      setError(err.message || "Errore salvataggio fase.");
+    } finally {
+      setPhaseSaving(false);
+    }
+  };
+
+  const handleDeletePhase = async (phase) => {
+    if (!phase?.id || phase.isNew) {
+      setPhaseDrawerOpen(false);
+      return;
+    }
+    setPhaseSaving(true);
+    try {
+      await deletePhase(procedure.code, version.version, phase.id);
+      await refreshPhases();
+      setSelectedPhase(null);
+      setPhaseDrawerOpen(false);
+      setError(null);
+    } catch (err) {
+      setError(err.message || "Errore eliminazione fase.");
+    } finally {
+      setPhaseSaving(false);
+    }
   };
 
   const handleCreateVariable = () => {
     setSelectedVariable({ scope: "Input", name: "NEW_VARIABLE", type: "string", required: false, defaultValue: "", description: "Nuova variabile della procedura.", isNew: true });
     setVariableDrawerOpen(true);
   };
+
   const handleEditVariable = (variable) => {
     setSelectedVariable(variable);
     setVariableDrawerOpen(true);
   };
-  const handleCloseVariableDrawer = () => setVariableDrawerOpen(false);
+
   const handleSaveVariable = (updatedVariable) => {
     setVariablesData((current) => {
       const exists = current.some((item) => item.name === selectedVariable?.name && item.scope === selectedVariable?.scope);
@@ -800,6 +823,7 @@ export default function ProcedureVersionDetails() {
     });
     setVariableDrawerOpen(false);
   };
+
   const handleDeleteVariable = (variable) => {
     setVariablesData((current) => current.filter((item) => !(item.name === variable.name && item.scope === variable.scope)));
     setVariableDrawerOpen(false);
@@ -807,7 +831,7 @@ export default function ProcedureVersionDetails() {
 
   const tabContent = [
     <OverviewTab key="overview" procedure={procedure} version={version} phases={phasesData} variables={variablesData} />,
-    <PhasesTab key="phases" phases={phasesData} onEditPhase={handleEditPhase} />,
+    <PhasesTab key="phases" phases={phasesData} onEditPhase={handleEditPhase} onCreatePhase={handleCreatePhase} />,
     <VariablesTab key="variables" items={variablesData} onCreateVariable={handleCreateVariable} onEditVariable={handleEditVariable} onDeleteVariable={handleDeleteVariable} />,
     <TestTab key="test" procedure={procedure} version={version} phases={phasesData} />,
     <AuditTab key="audit" />,
@@ -846,7 +870,7 @@ export default function ProcedureVersionDetails() {
             </Stack>
           </Paper>
 
-          {error && <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, borderColor: "error.main" }}><Typography color="error" fontWeight={900}>Errore caricamento dettaglio versione</Typography><Typography variant="body2" color="text.secondary">{error}</Typography></Paper>}
+          {error && <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 3, borderColor: "error.main" }}><Typography color="error" fontWeight={900}>Errore dettaglio versione</Typography><Typography variant="body2" color="text.secondary">{error}</Typography></Paper>}
 
           <Grid container spacing={3}>
             <Grid item xs={12} lg={8.7}>
@@ -862,9 +886,7 @@ export default function ProcedureVersionDetails() {
                 </Box>
                 <Divider />
                 <Box sx={{ p: { xs: 2, md: 2.5 } }}>
-                  {loading ? (
-                    <Stack alignItems="center" spacing={2} sx={{ py: 6 }}><CircularProgress /><Typography color="text.secondary" fontWeight={800}>Caricamento dettaglio versione...</Typography></Stack>
-                  ) : tabContent[tab]}
+                  {loading ? <Stack alignItems="center" spacing={2} sx={{ py: 6 }}><CircularProgress /><Typography color="text.secondary" fontWeight={800}>Caricamento dettaglio versione...</Typography></Stack> : tabContent[tab]}
                 </Box>
               </Paper>
             </Grid>
@@ -873,8 +895,14 @@ export default function ProcedureVersionDetails() {
             </Grid>
           </Grid>
         </Stack>
-        <PhaseEditorDrawer open={phaseDrawerOpen} phase={selectedPhase} onClose={handleClosePhaseDrawer} onSave={handleSavePhase} />
-        <VariableEditorDrawer open={variableDrawerOpen} variable={selectedVariable} onClose={handleCloseVariableDrawer} onSave={handleSaveVariable} onDelete={handleDeleteVariable} />
+        <PhaseDrawer open={phaseDrawerOpen} phase={selectedPhase} onClose={handleClosePhaseDrawer} onSave={handleSavePhase} onDelete={handleDeletePhase} saving={phaseSaving} />
+        <Drawer anchor="right" open={variableDrawerOpen} onClose={() => setVariableDrawerOpen(false)} PaperProps={{ sx: { width: { xs: "100%", sm: 500 }, maxWidth: "100%" } }}>
+          <Stack spacing={2} sx={{ p: 3 }}>
+            <Typography variant="h5" fontWeight={900}>Editor variabile</Typography>
+            <Typography color="text.secondary">CRUD variabili previsto nella milestone EUREKA 9.3.0.</Typography>
+            <Button variant="outlined" onClick={() => setVariableDrawerOpen(false)} sx={{ textTransform: "none", fontWeight: 800 }}>Chiudi</Button>
+          </Stack>
+        </Drawer>
       </Box>
     </AppLayout>
   );

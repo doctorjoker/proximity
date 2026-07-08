@@ -9,6 +9,7 @@ import ProcedureLibrary from "./pages/procedures/ProcedureLibrary";
 import ProcedureDetails from "./pages/procedures/ProcedureDetails";
 import ProcedureVersions from "./pages/procedures/ProcedureVersions";
 import ProcedureEditor from "./pages/procedures/ProcedureEditor";
+import ProcedureVersionDetails from "./pages/procedures/ProcedureVersionDetails";
 
 export default function App() {
   return (
@@ -31,6 +32,10 @@ export default function App() {
         <Route
           path="/procedures/:definitionCode/editor"
           element={<ProcedureEditor />}
+        />
+        <Route
+          path="/procedures/:procedureCode/versions/:version"
+          element={<ProcedureVersionDetails />}
         />
       </Routes>
     </BrowserRouter>

@@ -1,4 +1,4 @@
-const API = "/api/v1/service-workflows";
+const API = "/api/v1/procedures";
 
 async function request(url, options = {}) {
   const response = await fetch(url, {
@@ -16,55 +16,35 @@ async function request(url, options = {}) {
 }
 
 export async function listProcedures() {
-  return request(`${API}/definitions`);
+  return request(API);
 }
 
-export async function getProcedure(definitionCode) {
-  const data = await listProcedures();
-
-  return (data.items || []).find(
-    (item) => item.definition_code === definitionCode,
-  );
+export async function getProcedure(procedureCode) {
+  return request(`${API}/${procedureCode}`);
 }
 
-export async function listVersions(definitionCode) {
-  return request(
-    `${API}/definitions/${definitionCode}/versions`,
-  );
+export async function listVersions(procedureCode) {
+  return request(`${API}/${procedureCode}/versions`);
 }
 
-export async function publishVersion(
-  definitionCode,
-  version,
-) {
-  return request(
-    `${API}/definitions/${definitionCode}/versions/${version}/publish`,
-    {
-      method: "POST",
-    },
-  );
+export async function getVersion(procedureCode, version) {
+  return request(`${API}/${procedureCode}/versions/${version}`);
 }
 
-export async function cloneVersion(
-  definitionCode,
-  version,
-) {
-  return request(
-    `${API}/definitions/${definitionCode}/versions/${version}/clone`,
-    {
-      method: "POST",
-    },
-  );
+export async function publishVersion(procedureCode, version) {
+  return request(`${API}/${procedureCode}/versions/${version}/publish`, {
+    method: "POST",
+  });
 }
 
-export async function validateVersion(
-  definitionCode,
-  version,
-) {
-  return request(
-    `${API}/definitions/${definitionCode}/versions/${version}/validate`,
-    {
-      method: "POST",
-    },
-  );
+export async function cloneVersion(procedureCode, version) {
+  return request(`${API}/${procedureCode}/versions/${version}/clone`, {
+    method: "POST",
+  });
+}
+
+export async function validateVersion(procedureCode, version) {
+  return request(`${API}/${procedureCode}/versions/${version}/validate`, {
+    method: "POST",
+  });
 }
