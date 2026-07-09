@@ -78,6 +78,8 @@ from app.modules.procedures.router import router as procedures_router
 
 from app.modules.procedures.phase_router import router as procedure_phase_router
 
+from app.modules.procedures.variable_router import router as procedure_variable_router
+
 app = FastAPI(
     title=settings.app_name,
     version="6.0.0-foundation",
@@ -155,6 +157,7 @@ app.include_router(procedures_router)
 
 app.include_router(procedure_phase_router)
 
+app.include_router(procedure_variable_router)
 
 @app.get("/health")
 async def health():
