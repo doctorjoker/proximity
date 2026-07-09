@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link as RouterLink, useParams } from "react-router-dom";
+import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import AppLayout from "../../components/layout/AppLayout";
 import {
+  Alert,
   Box,
   Button,
   Card,
   CardContent,
   Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   Grid,
   IconButton,
@@ -19,6 +25,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -31,6 +38,11 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PublishIcon from "@mui/icons-material/Publish";
 import RestoreIcon from "@mui/icons-material/Restore";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+
+import {
+  publishProcedureVersion,
+  cloneProcedureVersion,
+} from "../../services/publishService";
 
 const statusLabel = {
   DRAFT: "Bozza",
@@ -77,6 +89,18 @@ function formatTime(value) {
   });
 }
 
+function versionNumber(value) {
+  const match = String(value || "").match(/^v(\d+)\.(\d+)$/i);
+  if (!match) return null;
+  return { major: Number(match[1]), minor: Number(match[2]) };
+}
+
+function suggestNextVersion(activeVersion, draftVersion) {
+  const base = versionNumber(draftVersion) || versionNumber(activeVersion);
+  if (!base) return "v1.0";
+  return `v${base.major}.${base.minor + 1}`;
+}
+
 function StatCard({ label, value, helper }) {
   return (
     <Card variant="outlined" sx={{ height: "100%", borderRadius: 3 }}>
@@ -97,12 +121,14 @@ function StatCard({ label, value, helper }) {
   );
 }
 
-function HeaderActionButton({ children, startIcon, variant = "outlined" }) {
+function HeaderActionButton({ children, startIcon, variant = "outlined", onClick, disabled }) {
   return (
     <Button
       size="small"
       variant={variant}
       startIcon={startIcon}
+      onClick={onClick}
+      disabled={disabled}
       sx={{
         height: 40,
         minWidth: 118,
@@ -117,71 +143,228 @@ function HeaderActionButton({ children, startIcon, variant = "outlined" }) {
   );
 }
 
+function ResultDialog({ open, title, result, onClose }) {
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent dividers>
+        {result && (
+          <Stack spacing={2}>
+            <Alert severity="success">Operazione completata correttamente</Alert>
+            <TextField
+              fullWidth
+              multiline
+              minRows={8}
+              value={JSON.stringify(result, null, 2)}
+              InputProps={{ readOnly: true }}
+            />
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} sx={{ textTransform: "none", fontWeight: 800 }}>
+          Chiudi
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function PublishDraftDialog({ open, draftVersion, saving, onClose, onConfirm }) {
+  return (
+    <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Pubblica bozza</DialogTitle>
+      <DialogContent dividers>
+        <Stack spacing={2}>
+          <Alert severity="warning">
+            Pubblicando la bozza {draftVersion}, questa diventerà la versione attiva. L'eventuale versione attiva precedente diventerà storica.
+          </Alert>
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button disabled={saving} onClick={onClose} sx={{ textTransform: "none", fontWeight: 800 }}>
+          Annulla
+        </Button>
+        <Button disabled={saving || !draftVersion || draftVersion === "n/d"} variant="contained" onClick={onConfirm} sx={{ textTransform: "none", fontWeight: 850 }}>
+          {saving ? "Pubblicazione..." : "Pubblica"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function CloneVersionDialog({ open, sourceVersion, suggestedVersion, saving, onClose, onConfirm }) {
+  const [targetVersion, setTargetVersion] = useState(suggestedVersion || "");
+  const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setTargetVersion(suggestedVersion || "");
+      setNotes("");
+    }
+  }, [open, suggestedVersion]);
+
+  return (
+    <Dialog open={open} onClose={saving ? undefined : onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Duplica versione</DialogTitle>
+      <DialogContent dividers>
+        <Stack spacing={2}>
+          <Alert severity="info">Clona {sourceVersion} come nuova bozza.</Alert>
+          <TextField
+            label="Nuova versione"
+            value={targetVersion}
+            onChange={(event) => setTargetVersion(event.target.value)}
+            placeholder="v1.5"
+            fullWidth
+            size="small"
+          />
+          <TextField
+            label="Note"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            fullWidth
+            multiline
+            minRows={3}
+            size="small"
+          />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button disabled={saving} onClick={onClose} sx={{ textTransform: "none", fontWeight: 800 }}>
+          Annulla
+        </Button>
+        <Button
+          disabled={saving || !targetVersion.trim() || !sourceVersion || sourceVersion === "n/d"}
+          variant="contained"
+          onClick={() => onConfirm({ target_version: targetVersion.trim(), notes })}
+          sx={{ textTransform: "none", fontWeight: 850 }}
+        >
+          {saving ? "Clonazione..." : "Clona"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 export default function ProcedureVersions() {
   const params = useParams();
+  const navigate = useNavigate();
   const procedureCode = params.definitionCode || params.procedureCode || "PROC-ROUTER-REPLACEMENT";
 
   const [procedure, setProcedure] = useState(null);
   const [versions, setVersions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [actionSaving, setActionSaving] = useState(false);
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
+  const [actionResult, setActionResult] = useState(null);
+  const [actionTitle, setActionTitle] = useState("Risultato");
+
+  const loadData = async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [procedureResponse, versionsResponse] = await Promise.all([
+        fetch(`/api/v1/procedures/${procedureCode}`),
+        fetch(`/api/v1/procedures/${procedureCode}/versions`),
+      ]);
+
+      if (!procedureResponse.ok) {
+        throw new Error(`Errore caricamento procedura (${procedureResponse.status})`);
+      }
+
+      if (!versionsResponse.ok) {
+        throw new Error(`Errore caricamento versioni (${versionsResponse.status})`);
+      }
+
+      const procedurePayload = await procedureResponse.json();
+      const versionsPayload = await versionsResponse.json();
+
+      setProcedure(procedurePayload.item || versionsPayload.procedure || null);
+      setVersions(Array.isArray(versionsPayload.items) ? versionsPayload.items : []);
+    } catch (err) {
+      setError(err.message || "Errore imprevisto durante il caricamento delle versioni.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let active = true;
-
-    async function loadData() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const [procedureResponse, versionsResponse] = await Promise.all([
-          fetch(`/api/v1/procedures/${procedureCode}`),
-          fetch(`/api/v1/procedures/${procedureCode}/versions`),
-        ]);
-
-        if (!procedureResponse.ok) {
-          throw new Error(`Errore caricamento procedura (${procedureResponse.status})`);
-        }
-
-        if (!versionsResponse.ok) {
-          throw new Error(`Errore caricamento versioni (${versionsResponse.status})`);
-        }
-
-        const procedurePayload = await procedureResponse.json();
-        const versionsPayload = await versionsResponse.json();
-
-        if (!active) return;
-
-        setProcedure(procedurePayload.item || versionsPayload.procedure || null);
-        setVersions(Array.isArray(versionsPayload.items) ? versionsPayload.items : []);
-      } catch (err) {
-        if (!active) return;
-        setError(err.message || "Errore imprevisto durante il caricamento delle versioni.");
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    }
-
     loadData();
-
-    return () => {
-      active = false;
-    };
   }, [procedureCode]);
 
   const activeVersion = procedure?.active_version || "n/d";
   const draftVersion = procedure?.draft_version || "n/d";
   const lastUpdate = procedure?.updated_at ? formatDate(procedure.updated_at) : "n/d";
+  const sourceVersionForClone = draftVersion !== "n/d" ? draftVersion : activeVersion;
+  const suggestedCloneVersion = suggestNextVersion(activeVersion, draftVersion !== "n/d" ? draftVersion : activeVersion);
+
   const totalPhases = useMemo(
     () => versions.reduce((sum, item) => sum + Number(item.phase_count || 0), 0),
     [versions],
   );
+
   const totalVariables = useMemo(
     () => versions.reduce((sum, item) => sum + Number(item.variable_count || 0), 0),
     [versions],
   );
+
+  const handlePublishDraft = async () => {
+    if (!draftVersion || draftVersion === "n/d") {
+      setError("Nessuna bozza disponibile da pubblicare.");
+      return;
+    }
+
+    setActionSaving(true);
+    try {
+      const result = await publishProcedureVersion(procedure?.code || procedureCode, draftVersion, {
+        requested_by: "Admin Proximity",
+        force: false,
+      });
+      setPublishDialogOpen(false);
+      setActionTitle("Pubblicazione bozza");
+      setActionResult(result);
+      await loadData();
+      setError(null);
+    } catch (err) {
+      setError(err.message || "Errore pubblicazione bozza.");
+    } finally {
+      setActionSaving(false);
+    }
+  };
+
+  const handleCloneVersion = async ({ target_version, notes }) => {
+    if (!sourceVersionForClone || sourceVersionForClone === "n/d") {
+      setError("Nessuna versione disponibile da duplicare.");
+      return;
+    }
+
+    setActionSaving(true);
+    try {
+      const result = await cloneProcedureVersion(procedure?.code || procedureCode, sourceVersionForClone, {
+        requested_by: "Admin Proximity",
+        target_version,
+        notes,
+      });
+      setCloneDialogOpen(false);
+      setActionTitle("Clonazione versione");
+      setActionResult(result);
+      await loadData();
+      setError(null);
+    } catch (err) {
+      setError(err.message || "Errore clonazione versione.");
+    } finally {
+      setActionSaving(false);
+    }
+  };
+
+  const openDraft = () => {
+    if (draftVersion && draftVersion !== "n/d") {
+      navigate(`/procedures/${procedure?.code || procedureCode}/versions/${draftVersion}`);
+    }
+  };
 
   return (
     <AppLayout>
@@ -242,9 +425,20 @@ export default function ProcedureVersions() {
               </Stack>
 
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap justifyContent={{ xs: "flex-start", md: "flex-end" }}>
-                <HeaderActionButton startIcon={<ContentCopyIcon />}>Duplica</HeaderActionButton>
-                <HeaderActionButton startIcon={<DownloadIcon />}>Esporta</HeaderActionButton>
-                <HeaderActionButton startIcon={<PublishIcon />} variant="contained">
+                <HeaderActionButton
+                  startIcon={<ContentCopyIcon />}
+                  onClick={() => setCloneDialogOpen(true)}
+                  disabled={actionSaving || sourceVersionForClone === "n/d"}
+                >
+                  Duplica
+                </HeaderActionButton>
+                <HeaderActionButton startIcon={<DownloadIcon />} disabled={actionSaving}>Esporta</HeaderActionButton>
+                <HeaderActionButton
+                  startIcon={actionSaving ? <CircularProgress size={16} color="inherit" /> : <PublishIcon />}
+                  variant="contained"
+                  onClick={() => setPublishDialogOpen(true)}
+                  disabled={actionSaving || draftVersion === "n/d"}
+                >
                   Pubblica bozza
                 </HeaderActionButton>
               </Stack>
@@ -384,7 +578,7 @@ export default function ProcedureVersions() {
                                 )}
                                 {label === "Storica" && (
                                   <Tooltip title="Ripristina come bozza">
-                                    <IconButton size="small">
+                                    <IconButton size="small" disabled>
                                       <RestoreIcon fontSize="small" />
                                     </IconButton>
                                   </Tooltip>
@@ -456,10 +650,24 @@ export default function ProcedureVersions() {
                     Azioni rapide
                   </Typography>
                   <Stack spacing={1}>
-                    <Button fullWidth variant="contained" startIcon={<PublishIcon />} sx={{ textTransform: "none", fontWeight: 800 }}>
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      startIcon={actionSaving ? <CircularProgress size={16} color="inherit" /> : <PublishIcon />}
+                      onClick={() => setPublishDialogOpen(true)}
+                      disabled={actionSaving || draftVersion === "n/d"}
+                      sx={{ textTransform: "none", fontWeight: 800 }}
+                    >
                       Pubblica bozza {draftVersion}
                     </Button>
-                    <Button fullWidth variant="outlined" startIcon={<PlayArrowIcon />} sx={{ textTransform: "none", fontWeight: 800 }}>
+                    <Button
+                      fullWidth
+                      variant="outlined"
+                      startIcon={<PlayArrowIcon />}
+                      onClick={openDraft}
+                      disabled={draftVersion === "n/d"}
+                      sx={{ textTransform: "none", fontWeight: 800 }}
+                    >
                       Esegui test procedura
                     </Button>
                     <Button fullWidth variant="outlined" startIcon={<DownloadIcon />} sx={{ textTransform: "none", fontWeight: 800 }}>
@@ -471,6 +679,30 @@ export default function ProcedureVersions() {
             </Grid>
           </Grid>
         </Stack>
+
+        <PublishDraftDialog
+          open={publishDialogOpen}
+          draftVersion={draftVersion}
+          saving={actionSaving}
+          onClose={() => setPublishDialogOpen(false)}
+          onConfirm={handlePublishDraft}
+        />
+
+        <CloneVersionDialog
+          open={cloneDialogOpen}
+          sourceVersion={sourceVersionForClone}
+          suggestedVersion={suggestedCloneVersion}
+          saving={actionSaving}
+          onClose={() => setCloneDialogOpen(false)}
+          onConfirm={handleCloneVersion}
+        />
+
+        <ResultDialog
+          open={Boolean(actionResult)}
+          title={actionTitle}
+          result={actionResult}
+          onClose={() => setActionResult(null)}
+        />
       </Box>
     </AppLayout>
   );
