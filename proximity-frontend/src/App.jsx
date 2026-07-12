@@ -11,6 +11,9 @@ import ProcedureVersions from "./pages/procedures/ProcedureVersions";
 import ProcedureEditor from "./pages/procedures/ProcedureEditor";
 import ProcedureVersionDetails from "./pages/procedures/ProcedureVersionDetails";
 
+import ProcedureExecutionCenter from "./pages/procedures/ProcedureExecutionCenter";
+
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -37,6 +40,11 @@ export default function App() {
           path="/procedures/:procedureCode/versions/:version"
           element={<ProcedureVersionDetails />}
         />
+        <Route
+          path="/procedures/executions"
+          element={<ProcedureExecutionCenter />}
+        />
+
       </Routes>
     </BrowserRouter>
   );
