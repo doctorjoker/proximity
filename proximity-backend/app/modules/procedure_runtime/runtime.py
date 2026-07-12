@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Any, Dict, Iterable, Mapping, Optional
 
 from .context import RuntimeContext
@@ -12,12 +13,7 @@ from .variable_snapshot import VariableSnapshot, VariableSnapshotBuilder
 
 
 class ProcedureRuntimeEngine:
-    """Procedure runtime orchestrator foundation.
-
-    EUREKA 9.5.0.2.1 adds variable snapshots plus single-phase execution while
-    keeping REST, persistence, retry, rollback, and workflow scheduling outside
-    this core. Those integrations are introduced in later milestones.
-    """
+    """Orchestrate runtime context, variable snapshot, phases and handlers."""
 
     def __init__(
         self,
@@ -80,6 +76,58 @@ class ProcedureRuntimeEngine:
         context: RuntimeContext,
     ) -> PhaseResult:
         return await self.phase_runner.run(phase=phase, context=context)
+
+    async def execute(
+        self,
+        *,
+        execution: Mapping[str, Any],
+        procedure: Mapping[str, Any],
+        version: Mapping[str, Any],
+        variable_definitions: Iterable[Mapping[str, Any]] | None,
+        runtime_values: Mapping[str, Any] | None,
+        phases: Iterable[Mapping[str, Any]],
+    ) -> dict[str, Any]:
+        """Run an execution through the runtime facade.
+
+        EUREKA 9.5.0.2.2 deliberately keeps persistence and the existing
+        Workflow Engine untouched. The caller registers an integration handler
+        and supplies one or more runtime phases. This makes the new Runtime the
+        execution entry point without changing the external REST contract.
+        """
+        started = perf_counter()
+        phase_list = [dict(phase) for phase in phases]
+        context = self.build_context(
+            execution=dict(execution),
+            procedure=dict(procedure),
+            version=dict(version),
+        )
+        snapshot = self.build_variable_snapshot(
+            definitions=variable_definitions,
+            runtime_values=runtime_values,
+            context=context,
+        )
+        phase_results = await self.phase_runner.run_many(
+            phases=phase_list,
+            context=context,
+        )
+
+        success = bool(phase_results) and all(result.success for result in phase_results)
+        if not phase_results:
+            success = False
+
+        context.metrics["total_duration_ms"] = max(
+            0,
+            int((perf_counter() - started) * 1000),
+        )
+        context.metrics.setdefault("counters", {})["phases_requested"] = len(phase_list)
+
+        return {
+            "success": success,
+            "snapshot": snapshot.to_dict(),
+            "phases": [result.to_dict() for result in phase_results],
+            "context": context.to_dict(),
+            "metrics": dict(context.metrics),
+        }
 
     def normalize_handler_result(self, value: Any) -> HandlerResult:
         return HandlerResult.from_value(value)

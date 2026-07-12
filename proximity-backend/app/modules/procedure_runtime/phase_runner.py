@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from .context import RuntimeContext
 from .contracts import HandlerResult
@@ -46,7 +46,7 @@ class PhaseResult:
 
 
 class PhaseRunner:
-    """Execute one procedure phase and normalize its lifecycle/result."""
+    """Execute procedure phases and normalize their lifecycle/results."""
 
     def __init__(self, handler_runner: HandlerRunner):
         self.handler_runner = handler_runner
@@ -96,13 +96,10 @@ class PhaseRunner:
 
         duration_ms = max(0, int((perf_counter() - started) * 1000))
         context.metrics.setdefault("phase_durations_ms", {})[phase_key] = duration_ms
-        context.metrics.setdefault("counters", {})["phases_executed"] = (
-            context.metrics.setdefault("counters", {}).get("phases_executed", 0) + 1
-        )
+        counters = context.metrics.setdefault("counters", {})
+        counters["phases_executed"] = counters.get("phases_executed", 0) + 1
         if status == PHASE_FAILED:
-            context.metrics["counters"]["phases_failed"] = (
-                context.metrics["counters"].get("phases_failed", 0) + 1
-            )
+            counters["phases_failed"] = counters.get("phases_failed", 0) + 1
 
         return PhaseResult(
             phase_key=phase_key,
@@ -112,5 +109,28 @@ class PhaseRunner:
             duration_ms=duration_ms,
             handler_result=result,
             error=error,
-            metadata={"phase_order": phase.get("phase_order")},
+            metadata={
+                "phase_order": phase.get("phase_order"),
+                "continue_on_error": bool(phase.get("continue_on_error", False)),
+            },
         )
+
+    async def run_many(
+        self,
+        *,
+        phases: Iterable[Mapping[str, Any]],
+        context: RuntimeContext,
+    ) -> list[PhaseResult]:
+        ordered = sorted(
+            [dict(phase) for phase in phases],
+            key=lambda phase: (phase.get("phase_order") or 0, phase.get("id") or 0),
+        )
+        results: list[PhaseResult] = []
+
+        for phase in ordered:
+            result = await self.run(phase=phase, context=context)
+            results.append(result)
+            if not result.success and not bool(phase.get("continue_on_error", False)):
+                break
+
+        return results

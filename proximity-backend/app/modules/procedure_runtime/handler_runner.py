@@ -22,6 +22,13 @@ class HandlerRunner:
             raise ValueError("Handler name and callable are required")
         self.handlers[name] = handler
 
+    def register_many(self, handlers: Mapping[str, HandlerCallable]) -> None:
+        for name, handler in handlers.items():
+            self.register(name, handler)
+
+    def has_handler(self, name: str) -> bool:
+        return name in self.handlers
+
     async def run(
         self,
         *,
