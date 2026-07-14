@@ -2,7 +2,7 @@ import { Box, Button, Paper, Stack, Typography } from "@mui/material";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import AppLayout from "./components/layout/AppLayout";
-import ProximityExperience from "./pages/ProximityExperience";
+import ProximityControlCenter from "./pages/ProximityControlCenter";
 import CustomerCareDashboard from "./pages/CustomerCareDashboard";
 import SuspendedPortal from "./pages/SuspendedPortal";
 import WorkflowOperationsCenter from "./pages/WorkflowOperationsCenter";
@@ -51,7 +51,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<ProximityExperience />} />
+        <Route path="/" element={<ProximityControlCenter />} />
 
         <Route path="/customers" element={<CustomerCareDashboard />} />
         <Route path="/customer-care" element={<Navigate to="/customers" replace />} />
