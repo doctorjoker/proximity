@@ -6,10 +6,13 @@ from app.modules.service_workflows.scheduler import schedule_workflow_execution
 from .exceptions import ProcedureRuntimeError
 from .repository import (
     create_execution,
+    create_execution_phase,
     create_runtime_workflow_record,
     get_execution,
     get_procedure_version,
     list_executions,
+    update_execution_phase,
+    record_execution_phase_attempt,
     update_execution_scheduler_result,
 )
 from .runtime import ProcedureRuntimeEngine
@@ -118,6 +121,13 @@ async def service_execute_procedure(code: str, version: str, payload):
 
     engine = ProcedureRuntimeEngine(
         handlers={SCHEDULER_HANDLER: scheduler_handler},
+        services={
+            "phase_persistence": {
+                "create": create_execution_phase,
+                "update": update_execution_phase,
+                "record_attempt": record_execution_phase_attempt,
+            }
+        },
     )
 
     try:
