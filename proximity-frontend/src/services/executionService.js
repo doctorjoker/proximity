@@ -1,44 +1,40 @@
-const API = "/api/v1/procedure-executions";
+const API_BASE = "/api/v1";
 
-async function request(url, options = {}) {
-  const response = await fetch(url, {
-    headers: {
-      "Content-Type": "application/json",
-    },
+async function requestJson(path, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
   });
 
+  const contentType = response.headers.get("content-type") || "";
+  const payload = contentType.includes("application/json")
+    ? await response.json()
+    : { detail: await response.text() };
+
   if (!response.ok) {
-    let message = `HTTP ${response.status}`;
-    try {
-      const payload = await response.json();
-      message = payload.detail || payload.message || message;
-    } catch {
-      const text = await response.text();
-      message = text || message;
-    }
-    throw new Error(message);
+    throw new Error(payload?.detail || `HTTP ${response.status}`);
   }
-
-  return response.json();
+  return payload;
 }
 
-export async function listExecutions({ limit = 100 } = {}) {
-  return request(`${API}?limit=${encodeURIComponent(limit)}`);
+export function listExecutions({ limit = 200 } = {}) {
+  return requestJson(`/procedure-executions?limit=${encodeURIComponent(limit)}`);
 }
 
-export async function getExecution(executionCode) {
-  return request(`${API}/${encodeURIComponent(executionCode)}`);
+export function getExecution(executionCode) {
+  return requestJson(`/procedure-executions/${encodeURIComponent(executionCode)}`);
 }
 
-export async function getExecutionTimeline(executionCode) {
-  return request(`${API}/${encodeURIComponent(executionCode)}/timeline`);
+export function getExecutionTimeline(executionCode) {
+  return requestJson(`/procedure-executions/${encodeURIComponent(executionCode)}/timeline`);
 }
 
-export async function getExecutionEvents(executionCode) {
-  return request(`${API}/${encodeURIComponent(executionCode)}/events`);
+export function getExecutionPhases(executionCode) {
+  return requestJson(`/procedure-executions/${encodeURIComponent(executionCode)}/phases`);
 }
 
-export async function getExecutionSteps(executionCode) {
-  return request(`${API}/${encodeURIComponent(executionCode)}/steps`);
+export function getExecutionEvents(executionCode) {
+  return requestJson(`/procedure-executions/${encodeURIComponent(executionCode)}/events`);
 }
+
+export const getExecutionSteps = getExecutionPhases;

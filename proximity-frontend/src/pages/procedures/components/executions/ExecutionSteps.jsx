@@ -10,33 +10,45 @@ function formatDuration(ms) {
 export default function ExecutionSteps({ items = [] }) {
   return (
     <Stack spacing={1.5}>
-      {items.map((step) => (
-        <Paper key={step.id || step.step_name} variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
-          <Stack spacing={1.4}>
-            <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
-              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-                <Typography variant="h6" fontWeight={900}>{step.step_name}</Typography>
-                <ExecutionStatusChip status={step.status} />
-                <Chip size="small" label={formatDuration(step.duration_ms)} variant="outlined" />
-              </Stack>
-              {step.error_message && <Chip size="small" color="error" label={step.error_message} />}
-            </Stack>
+      {items.map((phase) => {
+        const title = phase.phase_name || phase.step_name || phase.phase_key || "Fase runtime";
+        const input = phase.input_json ?? phase.input ?? {};
+        const output = phase.output_json ?? phase.output ?? {};
+        const error = phase.error_json ?? (phase.error_message ? { message: phase.error_message } : {});
 
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
-              <Box sx={{ flex: 1 }}>
-                <ExecutionJsonViewer title="Input" value={step.input} />
-              </Box>
-              <Box sx={{ flex: 1 }}>
-                <ExecutionJsonViewer title="Output" value={step.output} />
-              </Box>
+        return (
+          <Paper key={phase.id || phase.phase_key || title} variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+            <Stack spacing={1.4}>
+              <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={1}>
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <Typography variant="h6" fontWeight={900}>{title}</Typography>
+                  <ExecutionStatusChip status={phase.status} />
+                  <Chip size="small" label={formatDuration(phase.duration_ms)} variant="outlined" />
+                  {phase.handler_name && <Chip size="small" label={phase.handler_name} variant="outlined" sx={{ fontFamily: "monospace" }} />}
+                </Stack>
+                {phase.phase_order !== undefined && <Chip size="small" label={`Fase ${phase.phase_order}`} />}
+              </Stack>
+
+              <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5}>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <ExecutionJsonViewer title="Input" value={input} />
+                </Box>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <ExecutionJsonViewer title="Output" value={output} />
+                </Box>
+              </Stack>
+
+              {error && Object.keys(error).length > 0 && (
+                <ExecutionJsonViewer title="Errore" value={error} />
+              )}
             </Stack>
-          </Stack>
-        </Paper>
-      ))}
+          </Paper>
+        );
+      })}
 
       {items.length === 0 && (
         <Box sx={{ py: 3, textAlign: "center" }}>
-          <Typography color="text.secondary">Nessuno step workflow disponibile.</Typography>
+          <Typography color="text.secondary">Nessuna fase runtime persistita.</Typography>
         </Box>
       )}
     </Stack>

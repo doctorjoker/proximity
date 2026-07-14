@@ -7,7 +7,7 @@ import ExecutionDrawer from "./components/executions/ExecutionDrawer";
 import { listExecutions } from "../../services/executionService";
 
 function effectiveStatus(item) {
-  return item.workflow_engine_status || item.status || "";
+  return item.workflow_engine_status || item.workflow_record?.status || item.status || "";
 }
 
 function matchesQuery(item, query) {
@@ -21,9 +21,7 @@ function matchesQuery(item, query) {
     item.procedure_version,
     item.requested_by,
     item.current_step,
-  ]
-    .filter(Boolean)
-    .some((value) => String(value).toLowerCase().includes(q));
+  ].filter(Boolean).some((value) => String(value).toLowerCase().includes(q));
 }
 
 export default function ProcedureExecutionCenter() {
@@ -62,28 +60,17 @@ export default function ProcedureExecutionCenter() {
     return () => window.clearInterval(timer);
   }, [autoRefresh]);
 
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => {
-      const statusOk = status === "ALL" || effectiveStatus(item) === status;
-      const modeOk = mode === "ALL" || item.mode === mode;
-      return statusOk && modeOk && matchesQuery(item, query);
-    });
-  }, [items, mode, query, status]);
+  const filteredItems = useMemo(() => items.filter((item) => {
+    const statusOk = status === "ALL" || effectiveStatus(item) === status;
+    const modeOk = mode === "ALL" || item.mode === mode;
+    return statusOk && modeOk && matchesQuery(item, query);
+  }), [items, mode, query, status]);
 
   return (
     <AppLayout>
       <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1560, mx: "auto" }}>
         <Stack spacing={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: { xs: 2, md: 2.5 },
-              borderRadius: 4,
-              border: "1px solid",
-              borderColor: "divider",
-              background: "linear-gradient(135deg, rgba(30,90,168,0.10), rgba(255,122,0,0.08))",
-            }}
-          >
+          <Paper elevation={0} sx={{ p: { xs: 2, md: 2.5 }, borderRadius: 4, border: "1px solid", borderColor: "divider", background: "linear-gradient(135deg, rgba(30,90,168,0.10), rgba(255,122,0,0.08))" }}>
             <ExecutionToolbar
               query={query}
               onQueryChange={setQuery}
@@ -107,11 +94,7 @@ export default function ProcedureExecutionCenter() {
           )}
         </Stack>
 
-        <ExecutionDrawer
-          open={Boolean(selectedExecution)}
-          execution={selectedExecution}
-          onClose={() => setSelectedExecution(null)}
-        />
+        <ExecutionDrawer open={Boolean(selectedExecution)} execution={selectedExecution} onClose={() => setSelectedExecution(null)} />
       </Box>
     </AppLayout>
   );

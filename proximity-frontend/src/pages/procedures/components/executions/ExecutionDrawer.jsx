@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -9,9 +9,11 @@ import {
   Stack,
   Tab,
   Tabs,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import ExecutionOverview from "./ExecutionOverview";
 import ExecutionTimeline from "./ExecutionTimeline";
 import ExecutionEvents from "./ExecutionEvents";
@@ -21,64 +23,78 @@ import ExecutionStatusChip from "./ExecutionStatusChip";
 import {
   getExecution,
   getExecutionEvents,
-  getExecutionSteps,
+  getExecutionPhases,
   getExecutionTimeline,
 } from "../../../../services/executionService";
+
+const TERMINAL_STATUSES = new Set(["COMPLETED", "SUCCESS", "FAILED", "CANCELLED", "SKIPPED"]);
+
+function effectiveStatus(item) {
+  return item?.workflow_record?.status || item?.workflow_engine_status || item?.status || "";
+}
 
 export default function ExecutionDrawer({ open, execution, onClose }) {
   const [tab, setTab] = useState(0);
   const [detail, setDetail] = useState(null);
   const [timeline, setTimeline] = useState([]);
   const [events, setEvents] = useState([]);
-  const [steps, setSteps] = useState([]);
+  const [phases, setPhases] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    let active = true;
+  const executionCode = execution?.execution_code;
 
-    async function loadDetail() {
-      if (!open || !execution?.execution_code) return;
-      setLoading(true);
-      setError(null);
-      setTab(0);
+  const loadDetail = useCallback(async ({ silent = false } = {}) => {
+    if (!open || !executionCode) return;
+    if (silent) setRefreshing(true); else setLoading(true);
+    setError(null);
 
-      try {
-        const [detailPayload, timelinePayload, eventsPayload, stepsPayload] = await Promise.all([
-          getExecution(execution.execution_code),
-          getExecutionTimeline(execution.execution_code),
-          getExecutionEvents(execution.execution_code),
-          getExecutionSteps(execution.execution_code),
-        ]);
+    try {
+      const [detailPayload, timelinePayload, phasesPayload, eventsPayload] = await Promise.all([
+        getExecution(executionCode),
+        getExecutionTimeline(executionCode),
+        getExecutionPhases(executionCode),
+        getExecutionEvents(executionCode).catch(() => ({ items: [] })),
+      ]);
 
-        if (!active) return;
-        setDetail(detailPayload.item || execution);
-        setTimeline(Array.isArray(timelinePayload.items) ? timelinePayload.items : []);
-        setEvents(Array.isArray(eventsPayload.items) ? eventsPayload.items : []);
-        setSteps(Array.isArray(stepsPayload.items) ? stepsPayload.items : []);
-      } catch (err) {
-        if (!active) return;
-        setError(err.message || "Errore caricamento dettaglio esecuzione.");
-      } finally {
-        if (active) setLoading(false);
-      }
+      setDetail(detailPayload.item || detailPayload.execution || execution);
+      setTimeline(Array.isArray(timelinePayload.items) ? timelinePayload.items : []);
+      setPhases(Array.isArray(phasesPayload.items) ? phasesPayload.items : []);
+      setEvents(Array.isArray(eventsPayload.items) ? eventsPayload.items : []);
+    } catch (err) {
+      setError(err.message || "Errore caricamento dettaglio esecuzione.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
+  }, [execution, executionCode, open]);
 
+  useEffect(() => {
+    if (!open || !executionCode) return undefined;
+    setTab(0);
+    setDetail(null);
+    setTimeline([]);
+    setEvents([]);
+    setPhases([]);
     loadDetail();
-    return () => {
-      active = false;
-    };
-  }, [open, execution?.execution_code]);
+    return undefined;
+  }, [executionCode, loadDetail, open]);
 
   const current = detail || execution;
-  const effectiveStatus = current?.workflow_record?.status || current?.workflow_engine_status || current?.status;
-  const procedureName = current?.procedure_name || current?.procedure_code || "Procedura";
+  const status = String(effectiveStatus(current)).toUpperCase();
 
-  const tabContent = [
+  useEffect(() => {
+    if (!open || !executionCode || TERMINAL_STATUSES.has(status)) return undefined;
+    const timer = window.setInterval(() => loadDetail({ silent: true }), 5000);
+    return () => window.clearInterval(timer);
+  }, [executionCode, loadDetail, open, status]);
+
+  const tabContent = useMemo(() => [
     <ExecutionOverview key="overview" execution={current} />,
     <ExecutionTimeline key="timeline" items={timeline} />,
+    <ExecutionSteps key="phases" items={phases} />,
     <ExecutionEvents key="events" items={events} />,
-    <ExecutionSteps key="steps" items={steps} />,
     <Stack key="json" spacing={2}>
       <ExecutionJsonViewer title="Context JSON" value={current?.context_json} />
       <ExecutionJsonViewer title="Input Payload" value={current?.input_payload} />
@@ -86,40 +102,45 @@ export default function ExecutionDrawer({ open, execution, onClose }) {
       <ExecutionJsonViewer title="Result JSON" value={current?.result_json} />
       <ExecutionJsonViewer title="Workflow Record" value={current?.workflow_record} />
     </Stack>,
-  ];
+  ], [current, events, phases, timeline]);
 
   return (
     <Drawer
       anchor="right"
       open={open}
       onClose={onClose}
-      PaperProps={{ sx: { width: { xs: "100%", md: 760, xl: 820 } } }}
+      PaperProps={{ sx: { width: { xs: "100%", md: 780, xl: 860 } } }}
     >
       <Stack sx={{ height: "100%" }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ px: 2.5, py: 2 }}>
-          <Stack spacing={0.35} sx={{ minWidth: 0 }}>
-            <Typography variant="overline" color="text.secondary" fontWeight={900} lineHeight={1.2}>
-              Execution Monitor
-            </Typography>
-            <Stack direction="row" spacing={1.2} alignItems="center" flexWrap="wrap" useFlexGap>
-              <Typography variant="h5" fontWeight={950}>{current?.execution_code || "Execution"}</Typography>
-              <ExecutionStatusChip status={effectiveStatus} />
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ p: 2.5 }}>
+          <Stack spacing={0.8} sx={{ minWidth: 0 }}>
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+              <Typography variant="h5" fontWeight={950}>Dettaglio esecuzione</Typography>
+              <ExecutionStatusChip status={status} />
             </Stack>
-            <Typography variant="body2" fontWeight={800} noWrap>{procedureName}</Typography>
-            <Typography variant="caption" color="text.secondary">
-              Workflow {current?.workflow_code || "n/d"} · Versione {current?.procedure_version || "n/d"}
+            <Typography variant="body2" color="text.secondary">
+              {current?.execution_code || "n/d"} · {current?.workflow_code || "workflow n/d"}
             </Typography>
           </Stack>
-          <IconButton onClick={onClose} aria-label="Chiudi dettaglio"><CloseIcon /></IconButton>
+          <Stack direction="row" spacing={0.5}>
+            <Tooltip title="Aggiorna">
+              <span>
+                <IconButton onClick={() => loadDetail()} disabled={loading || refreshing}>
+                  {refreshing ? <CircularProgress size={20} /> : <RefreshIcon />}
+                </IconButton>
+              </span>
+            </Tooltip>
+            <IconButton onClick={onClose}><CloseIcon /></IconButton>
+          </Stack>
         </Stack>
         <Divider />
 
         <Box sx={{ px: 2 }}>
           <Tabs value={tab} onChange={(_, value) => setTab(value)} variant="scrollable" scrollButtons="auto">
             <Tab label="Overview" />
-            <Tab label="Timeline" />
-            <Tab label="Events" />
-            <Tab label="Steps" />
+            <Tab label={`Timeline (${timeline.length})`} />
+            <Tab label={`Fasi (${phases.length})`} />
+            <Tab label={`Eventi (${events.length})`} />
             <Tab label="JSON" />
           </Tabs>
         </Box>
