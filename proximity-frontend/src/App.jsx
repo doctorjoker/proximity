@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import AppLayout from "./components/layout/AppLayout";
 import ProximityControlCenter from "./pages/ProximityControlCenter";
+import Customers from "./pages/Customers";
 import CustomerCareDashboard from "./pages/CustomerCareDashboard";
 import SuspendedPortal from "./pages/SuspendedPortal";
 import WorkflowOperationsCenter from "./pages/WorkflowOperationsCenter";
@@ -53,8 +54,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<ProximityControlCenter />} />
 
-        <Route path="/customers" element={<CustomerCareDashboard />} />
-        <Route path="/customer-care" element={<Navigate to="/customers" replace />} />
+        <Route path="/customers" element={<Customers />} />
+        <Route path="/customer-care" element={<CustomerCareDashboard />} />
 
         <Route path="/workflow-operations" element={<WorkflowOperationsCenter />} />
         <Route path="/suspended" element={<SuspendedPortal />} />
