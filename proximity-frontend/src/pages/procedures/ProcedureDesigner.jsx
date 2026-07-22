@@ -414,6 +414,41 @@ const getTransitionType = (edge) =>
     'SUCCESS',
   )).trim().toUpperCase()
 
+const TRANSITION_STYLES = {
+  SUCCESS: { stroke: '#64748B', label: '#475569', animated: false },
+  ERROR: { stroke: '#DC2626', label: '#B91C1C', animated: true },
+  TIMEOUT: { stroke: '#EA580C', label: '#C2410C', animated: true },
+  TRUE: { stroke: '#16A34A', label: '#15803D', animated: false },
+  FALSE: { stroke: '#B91C1C', label: '#991B1B', animated: false },
+}
+
+const styleEdge = (edge, transitionType, explicitLabel) => {
+  const normalizedType = String(transitionType || 'SUCCESS').toUpperCase()
+  const visual = TRANSITION_STYLES[normalizedType] || TRANSITION_STYLES.SUCCESS
+  const cleanLabel = String(explicitLabel ?? '').trim()
+
+  return {
+    ...edge,
+    transition_type: normalizedType,
+    animated: visual.animated,
+    label: cleanLabel || (normalizedType === 'SUCCESS' ? undefined : normalizedType),
+    data: {
+      ...(edge.data || {}),
+      transition_type: normalizedType,
+    },
+    style: {
+      ...(edge.style || {}),
+      stroke: visual.stroke,
+      strokeWidth: 2,
+    },
+    labelStyle: {
+      ...(edge.labelStyle || {}),
+      fill: visual.label,
+      fontWeight: 800,
+    },
+  }
+}
+
 const mapDesignerNode = (designerNode, index) => {
   const phase = designerNode?.data || designerNode?.phase || {}
   const style = getCategoryStyle(phase)
@@ -446,31 +481,22 @@ const mapDesignerNode = (designerNode, index) => {
 
 const mapDesignerEdge = (edge, index) => {
   const transitionType = getTransitionType(edge)
-  const isError = ['ERROR', 'FAILURE', 'TIMEOUT'].includes(transitionType)
-
-  return {
+  const mapped = {
     id: String(firstDefined(edge.id, `edge-${index + 1}`)),
     source: String(edge.source),
     target: String(edge.target),
     sourceHandle: edge.sourceHandle,
     targetHandle: edge.targetHandle,
     type: firstDefined(edge.type, 'smoothstep'),
-    animated: isError,
-    label: firstDefined(edge.label, transitionType === 'SUCCESS' ? undefined : transitionType),
     data: {
       ...(edge.data || {}),
       transition_type: transitionType,
       sort_order: Number(firstDefined(edge.sort_order, edge.data?.sort_order, index)),
       metadata: edge.metadata || edge.data?.metadata || {},
     },
-    style: {
-      stroke: isError ? '#DC2626' : '#64748B',
-      strokeWidth: 2,
-    },
-    labelStyle: isError
-      ? { fill: '#B91C1C', fontWeight: 700 }
-      : undefined,
   }
+
+  return styleEdge(mapped, transitionType, edge.label)
 }
 
 const serializeDesigner = (nodes, edges) => {
@@ -503,17 +529,17 @@ const serializeDesigner = (nodes, edges) => {
           id: String(edge.id),
           source: String(edge.source),
           target: String(edge.target),
-          type: firstDefined(edge.type, 'smoothstep'),
-          label: firstDefined(edge.label, transitionType),
-          data: {
-            transition_type: transitionType,
-            sort_order: Number(firstDefined(
-              edge.data?.sort_order,
-              edge.sort_order,
-              index,
-            )),
-            metadata: edge.data?.metadata || edge.metadata || {},
-          },
+          transition_type: transitionType,
+          label: firstDefined(
+            edge.label,
+            transitionType === 'SUCCESS' ? undefined : transitionType,
+          ),
+          sort_order: Number(firstDefined(
+            edge.data?.sort_order,
+            edge.sort_order,
+            index,
+          )),
+          metadata: edge.data?.metadata || edge.metadata || {},
         }
       }),
   }
@@ -707,6 +733,25 @@ export default function ProcedureDesigner({
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) || null,
     [nodes, selectedNodeId],
+  )
+
+  const selectedEdge = useMemo(
+    () => edges.find((edge) => String(edge.id) === String(selectedEdgeId)) || null,
+    [edges, selectedEdgeId],
+  )
+
+  const selectedEdgeSourceNode = useMemo(
+    () => selectedEdge
+      ? nodes.find((node) => String(node.id) === String(selectedEdge.source)) || null
+      : null,
+    [nodes, selectedEdge],
+  )
+
+  const selectedEdgeTargetNode = useMemo(
+    () => selectedEdge
+      ? nodes.find((node) => String(node.id) === String(selectedEdge.target)) || null
+      : null,
+    [nodes, selectedEdge],
   )
 
   const addNode = useCallback(async (step, position) => {
@@ -949,14 +994,16 @@ export default function ProcedureDesigner({
       inserted = true
 
       return addEdge(
-        {
-          ...connection,
-          id: createEdgeId(connection.source, connection.target),
-          type: 'smoothstep',
-          animated: false,
-          data: { transition_type: 'SUCCESS' },
-          style: { stroke: '#64748B', strokeWidth: 2 },
-        },
+        styleEdge(
+          {
+            ...connection,
+            id: createEdgeId(connection.source, connection.target),
+            type: 'smoothstep',
+            data: { transition_type: 'SUCCESS', sort_order: current.length, metadata: {} },
+          },
+          'SUCCESS',
+          '',
+        ),
         current,
       )
     })
@@ -982,6 +1029,36 @@ export default function ProcedureDesigner({
       markDirty()
     }
   }, [markDirty])
+
+  const handleEdgePropertiesChange = useCallback((nextProperties) => {
+    if (!selectedEdgeId) return
+
+    setEdges((current) =>
+      current.map((edge) => {
+        if (String(edge.id) !== String(selectedEdgeId)) return edge
+
+        const transitionType = String(
+          nextProperties.transition_type || getTransitionType(edge),
+        ).toUpperCase()
+
+        const updated = styleEdge(
+          {
+            ...edge,
+            data: {
+              ...(edge.data || {}),
+              sort_order: Number(nextProperties.sort_order ?? edge.data?.sort_order ?? 0),
+            },
+          },
+          transitionType,
+          nextProperties.label,
+        )
+
+        return updated
+      }),
+    )
+
+    markDirty()
+  }, [markDirty, selectedEdgeId])
 
   const handleRemoveEdge = useCallback((edgeId) => {
     if (!edgeId) return
@@ -1126,9 +1203,14 @@ export default function ProcedureDesigner({
 
         <PropertiesPanel
           selectedStep={selectedNode}
+          selectedEdge={selectedEdge}
+          sourceNode={selectedEdgeSourceNode}
+          targetNode={selectedEdgeTargetNode}
           value={selectedNode?.properties}
           onChange={handlePropertiesChange}
           onSave={handlePropertiesSave}
+          onEdgeChange={handleEdgePropertiesChange}
+          onRemoveEdge={handleRemoveEdge}
         />
       </Box>
     </WorkspaceTemplate>

@@ -39,3 +39,4 @@ firmware/*.bin
 firmware/*.img
 firmware/*.fw
 firmware/*.trx
+backups/
