@@ -175,6 +175,7 @@ function WorkflowCanvasInner({
   nodes = [],
   edges = [],
   selectedNodeId,
+  selectedEdgeId,
   onSelectNode,
   onSelectEdge,
   onAddNode,
@@ -183,6 +184,7 @@ function WorkflowCanvasInner({
   onClear,
   onConnect,
   onEdgesChange,
+  onRemoveEdge,
 }) {
   const wrapperRef = useRef(null)
   const { screenToFlowPosition } = useReactFlow()
@@ -345,6 +347,35 @@ function WorkflowCanvasInner({
             label={`${edges.length} connessioni`}
             sx={{ fontWeight: 800, bgcolor: '#E2E8F0', color: '#334155' }}
           />
+
+          {selectedEdgeId ? (
+            <Box
+              component="button"
+              type="button"
+              onClick={() => {
+                if (!window.confirm('Eliminare la connessione selezionata?')) return
+                onRemoveEdge?.(selectedEdgeId)
+              }}
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.6,
+                px: 1,
+                height: 30,
+                border: '1px solid #FCA5A5',
+                borderRadius: 1.5,
+                bgcolor: '#FEF2F2',
+                color: '#B91C1C',
+                fontWeight: 800,
+                fontSize: 12,
+                cursor: 'pointer',
+                '&:hover': { borderColor: '#DC2626', bgcolor: '#FEE2E2' },
+              }}
+            >
+              <IconTrash size={15} />
+              Elimina connessione
+            </Box>
+          ) : null}
 
           {nodes.length > 0 ? (
             <Box

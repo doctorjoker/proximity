@@ -382,7 +382,7 @@ export default function PropertiesPanel({
 
           {saved ? (
             <Alert severity="info" sx={{ mb: 1.5 }}>
-              Configurazione salvata nello stato locale del Designer.
+              Configurazione salvata nel backend della procedura.
             </Alert>
           ) : null}
 

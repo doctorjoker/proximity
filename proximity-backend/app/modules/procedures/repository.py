@@ -449,3 +449,283 @@ def list_execution_logs(execution_code: str):
                 ORDER BY l.created_at ASC, l.phase_order ASC
             """, (execution_code,))
             return cur.fetchall()
+
+
+def _phase_to_designer_node(phase):
+    if not phase:
+        return None
+
+    phase_data = dict(phase)
+    return {
+        "id": str(phase_data["id"]),
+        "position": {
+            "x": float(phase_data.get("position_x") or 120),
+            "y": float(phase_data.get("position_y") or 120),
+        },
+        "data": phase_data,
+    }
+
+
+def create_phase(code: str, version: str, payload):
+    version_item = get_version(code, version)
+    if not version_item:
+        return None
+
+    data = payload.dict(exclude_unset=True)
+    position = data.pop("position", None) or {}
+    requested_order = data.pop("phase_order", None)
+
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            # Serializes phase ordering operations for this procedure version.
+            cur.execute(
+                "SELECT id FROM procedure_versions WHERE id = %s FOR UPDATE",
+                (version_item["id"],),
+            )
+
+            cur.execute(
+                "SELECT COALESCE(MAX(phase_order), 0) AS max_order "
+                "FROM procedure_phases WHERE version_id = %s",
+                (version_item["id"],),
+            )
+            max_order = cur.fetchone()["max_order"]
+
+            if requested_order is None:
+                phase_order = max_order + 1
+            else:
+                phase_order = max(1, min(int(requested_order), max_order + 1))
+                cur.execute("""
+                    UPDATE procedure_phases
+                    SET phase_order = phase_order + 1,
+                        updated_at = now()
+                    WHERE version_id = %s
+                      AND phase_order >= %s
+                """, (version_item["id"], phase_order))
+
+            cur.execute("""
+                INSERT INTO procedure_phases (
+                    version_id,
+                    phase_order,
+                    name,
+                    action,
+                    type,
+                    timeout,
+                    retry,
+                    status,
+                    description,
+                    continue_on_error,
+                    success_transition,
+                    error_transition,
+                    input_variables,
+                    output_variables,
+                    position_x,
+                    position_y
+                )
+                VALUES (
+                    %(version_id)s,
+                    %(phase_order)s,
+                    %(name)s,
+                    %(action)s,
+                    %(type)s,
+                    %(timeout)s,
+                    %(retry)s,
+                    %(status)s,
+                    %(description)s,
+                    %(continue_on_error)s,
+                    %(success_transition)s,
+                    %(error_transition)s,
+                    %(input_variables)s,
+                    %(output_variables)s,
+                    %(position_x)s,
+                    %(position_y)s
+                )
+                RETURNING *
+            """, {
+                "version_id": version_item["id"],
+                "phase_order": phase_order,
+                "name": data.get("name"),
+                "action": data.get("action", "noop"),
+                "type": data.get("type", "Action"),
+                "timeout": data.get("timeout", "30s"),
+                "retry": data.get("retry", 0),
+                "status": data.get("status", "DRAFT"),
+                "description": data.get("description"),
+                "continue_on_error": data.get("continue_on_error", False),
+                "success_transition": data.get("success_transition"),
+                "error_transition": data.get("error_transition"),
+                "input_variables": data.get("input_variables"),
+                "output_variables": data.get("output_variables"),
+                "position_x": round(float(position.get("x", 120))),
+                "position_y": round(float(position.get("y", 120))),
+            })
+            phase = cur.fetchone()
+
+    return _phase_to_designer_node(phase)
+
+
+def update_phase(code: str, version: str, phase_id: int, payload):
+    version_item = get_version(code, version)
+    if not version_item:
+        return None
+
+    changes = payload.dict(exclude_unset=True)
+    if not changes:
+        with get_conn() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT * FROM procedure_phases
+                    WHERE id = %s AND version_id = %s
+                """, (phase_id, version_item["id"]))
+                return _phase_to_designer_node(cur.fetchone())
+
+    position = changes.pop("position", None)
+    requested_order = changes.pop("phase_order", None)
+
+    allowed_columns = {
+        "name",
+        "action",
+        "type",
+        "timeout",
+        "retry",
+        "status",
+        "description",
+        "continue_on_error",
+        "success_transition",
+        "error_transition",
+        "input_variables",
+        "output_variables",
+    }
+
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id FROM procedure_versions WHERE id = %s FOR UPDATE",
+                (version_item["id"],),
+            )
+            cur.execute("""
+                SELECT * FROM procedure_phases
+                WHERE id = %s AND version_id = %s
+                FOR UPDATE
+            """, (phase_id, version_item["id"]))
+            current = cur.fetchone()
+            if not current:
+                return False
+
+            assignments = []
+            values = []
+
+            if requested_order is not None:
+                cur.execute(
+                    "SELECT COUNT(*) AS phase_count FROM procedure_phases WHERE version_id = %s",
+                    (version_item["id"],),
+                )
+                phase_count = cur.fetchone()["phase_count"]
+                old_order = current["phase_order"]
+                new_order = max(1, min(int(requested_order), phase_count))
+
+                if new_order < old_order:
+                    cur.execute("""
+                        UPDATE procedure_phases
+                        SET phase_order = phase_order + 1,
+                            updated_at = now()
+                        WHERE version_id = %s
+                          AND id <> %s
+                          AND phase_order >= %s
+                          AND phase_order < %s
+                    """, (version_item["id"], phase_id, new_order, old_order))
+                elif new_order > old_order:
+                    cur.execute("""
+                        UPDATE procedure_phases
+                        SET phase_order = phase_order - 1,
+                            updated_at = now()
+                        WHERE version_id = %s
+                          AND id <> %s
+                          AND phase_order > %s
+                          AND phase_order <= %s
+                    """, (version_item["id"], phase_id, old_order, new_order))
+
+                assignments.append("phase_order = %s")
+                values.append(new_order)
+
+            for field, value in changes.items():
+                if field not in allowed_columns:
+                    continue
+                assignments.append(f"{field} = %s")
+                values.append(value)
+
+            if position is not None:
+                if "x" in position:
+                    assignments.append("position_x = %s")
+                    values.append(round(float(position["x"])))
+                if "y" in position:
+                    assignments.append("position_y = %s")
+                    values.append(round(float(position["y"])))
+
+            if assignments:
+                assignments.append("updated_at = now()")
+                values.extend([phase_id, version_item["id"]])
+                cur.execute(f"""
+                    UPDATE procedure_phases
+                    SET {", ".join(assignments)}
+                    WHERE id = %s AND version_id = %s
+                    RETURNING *
+                """, values)
+                phase = cur.fetchone()
+            else:
+                phase = current
+
+    return _phase_to_designer_node(phase)
+
+
+def delete_phase(code: str, version: str, phase_id: int):
+    version_item = get_version(code, version)
+    if not version_item:
+        return None
+
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                "SELECT id FROM procedure_versions WHERE id = %s FOR UPDATE",
+                (version_item["id"],),
+            )
+            cur.execute("""
+                SELECT * FROM procedure_phases
+                WHERE id = %s AND version_id = %s
+                FOR UPDATE
+            """, (phase_id, version_item["id"]))
+            phase = cur.fetchone()
+            if not phase:
+                return False
+
+            cur.execute("""
+                DELETE FROM procedure_phase_transitions
+                WHERE version_id = %s
+                  AND (source_phase_id = %s OR target_phase_id = %s)
+            """, (version_item["id"], phase_id, phase_id))
+
+            cur.execute("""
+                DELETE FROM procedure_phases
+                WHERE id = %s AND version_id = %s
+            """, (phase_id, version_item["id"]))
+
+            # Keeps the sequence compact after deletion.
+            cur.execute("""
+                WITH ordered AS (
+                    SELECT
+                        id,
+                        ROW_NUMBER() OVER (ORDER BY phase_order ASC, id ASC) AS new_order
+                    FROM procedure_phases
+                    WHERE version_id = %s
+                )
+                UPDATE procedure_phases p
+                SET phase_order = ordered.new_order,
+                    updated_at = now()
+                FROM ordered
+                WHERE p.id = ordered.id
+                  AND p.phase_order IS DISTINCT FROM ordered.new_order
+            """, (version_item["id"],))
+
+    return {
+        "id": str(phase_id),
+        "phase": dict(phase),
+    }

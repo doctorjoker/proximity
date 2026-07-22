@@ -158,7 +158,7 @@ const createPhaseProperties = (phase, index) => ({
     phase.summary,
     '',
   ),
-  timeout: Number(firstDefined(
+  timeout: parseFloat(firstDefined(
     phase.timeout,
     phase.timeout_seconds,
     phase.timeoutSeconds,
@@ -363,10 +363,44 @@ const API_BASE_URL = String(
   import.meta.env.VITE_API_BASE_URL || '',
 ).replace(/\/$/, '')
 
-const buildDesignerUrl = (procedureCode, versionLabel) =>
+const buildVersionUrl = (procedureCode, versionLabel) =>
   `${API_BASE_URL}/api/v1/procedures/${encodeURIComponent(
     procedureCode,
-  )}/versions/${encodeURIComponent(versionLabel)}/designer`
+  )}/versions/${encodeURIComponent(versionLabel)}`
+
+const buildDesignerUrl = (procedureCode, versionLabel) =>
+  `${buildVersionUrl(procedureCode, versionLabel)}/designer`
+
+const buildPhasesUrl = (procedureCode, versionLabel) =>
+  `${buildVersionUrl(procedureCode, versionLabel)}/phases`
+
+const readApiPayload = async (response) => {
+  const payload = await response.json().catch(() => ({}))
+
+  if (!response.ok || payload?.success === false) {
+    throw new Error(
+      payload?.detail ||
+      payload?.message ||
+      `Errore HTTP ${response.status}`,
+    )
+  }
+
+  return payload
+}
+
+const normalizeTimeoutForApi = (value) => {
+  const text = String(value ?? '').trim()
+  if (!text) return '60s'
+  return /^\d+(?:\.\d+)?$/.test(text) ? `${text}s` : text
+}
+
+const phaseTypeForStep = (step) => {
+  const category = String(step?.category || step?.id || '').toLowerCase()
+  if (category.includes('logic') || category.includes('condition')) return 'CONDITION'
+  if (category.includes('flow')) return 'FLOW'
+  if (category.includes('notification') || category.includes('customer')) return 'NOTIFICATION'
+  return 'ACTION'
+}
 
 const isPersistedPhaseId = (value) => /^\d+$/.test(String(value || ''))
 
@@ -523,6 +557,7 @@ export default function ProcedureDesigner({
   const [saveState, setSaveState] = useState('idle')
   const [designerError, setDesignerError] = useState('')
   const [saveRevision, setSaveRevision] = useState(0)
+  const [authoringState, setAuthoringState] = useState('idle')
 
   const loadedRef = useRef(false)
   const dirtyRef = useRef(false)
@@ -674,22 +709,70 @@ export default function ProcedureDesigner({
     [nodes, selectedNodeId],
   )
 
-  const addNode = useCallback((step, position) => {
-    const node = {
-      ...step,
-      id: createNodeId(step.id),
-      type: step.id,
-      position: position || {
-        x: 80 + (nodes.length % 3) * 280,
-        y: 80 + Math.floor(nodes.length / 3) * 150,
-      },
-      properties: createDefaultProperties(step),
+  const addNode = useCallback(async (step, position) => {
+    if (!procedureCode || !versionLabel) {
+      setDesignerError('Impossibile creare la fase: contesto procedura/versione non disponibile.')
+      return
     }
 
-    setNodes((current) => [...current, node])
-    setSelectedNodeId(node.id)
-    setSelectedEdgeId(null)
-  }, [nodes.length])
+    const targetPosition = position || {
+      x: 80 + (nodes.length % 3) * 280,
+      y: 80 + Math.floor(nodes.length / 3) * 150,
+    }
+
+    setAuthoringState('creating')
+    setDesignerError('')
+
+    try {
+      const response = await fetch(buildPhasesUrl(procedureCode, versionLabel), {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: step.label,
+          description: step.description || null,
+          phase_type: phaseTypeForStep(step),
+          handler: step.id,
+          position: targetPosition,
+        }),
+      })
+
+      const payload = await readApiPayload(response)
+      if (!payload?.node) throw new Error('Il backend non ha restituito il nodo creato.')
+
+      const createdNode = mapDesignerNode(payload.node, nodes.length)
+      const style = getCategoryStyle({
+        ...payload.node.data,
+        category: step.category,
+      })
+
+      const nextNode = {
+        ...createdNode,
+        type: step.category || createdNode.type,
+        color: step.color || style.color,
+        categoryLabel: step.categoryLabel || style.label,
+        properties: {
+          ...createDefaultProperties(step),
+          ...createdNode.properties,
+        },
+        phase: {
+          ...createdNode.phase,
+          category: step.category,
+          handler: step.id,
+        },
+      }
+
+      setNodes((current) => [...current, nextNode])
+      setSelectedNodeId(nextNode.id)
+      setSelectedEdgeId(null)
+      setAuthoringState('created')
+    } catch (error) {
+      setAuthoringState('error')
+      setDesignerError(`Creazione fase non riuscita: ${error.message}`)
+    }
+  }, [nodes.length, procedureCode, versionLabel])
 
   const handleExplorerSelect = useCallback(
     (step) => addNode(step),
@@ -705,16 +788,49 @@ export default function ProcedureDesigner({
     markDirty()
   }, [markDirty])
 
-  const handleRemoveNode = useCallback((nodeId) => {
-    setNodes((current) => current.filter((node) => node.id !== nodeId))
-    setEdges((current) =>
-      current.filter(
-        (edge) => edge.source !== nodeId && edge.target !== nodeId,
-      ),
-    )
-    setSelectedNodeId((current) => current === nodeId ? null : current)
-    markDirty()
-  }, [markDirty])
+  const handleRemoveNode = useCallback(async (nodeId) => {
+    if (!isPersistedPhaseId(nodeId)) {
+      setNodes((current) => current.filter((node) => node.id !== nodeId))
+      setEdges((current) =>
+        current.filter(
+          (edge) => edge.source !== nodeId && edge.target !== nodeId,
+        ),
+      )
+      setSelectedNodeId((current) => current === nodeId ? null : current)
+      markDirty()
+      return
+    }
+
+    if (!procedureCode || !versionLabel) {
+      setDesignerError('Impossibile eliminare la fase: contesto procedura/versione non disponibile.')
+      return
+    }
+
+    setAuthoringState('deleting')
+    setDesignerError('')
+
+    try {
+      const response = await fetch(
+        `${buildPhasesUrl(procedureCode, versionLabel)}/${encodeURIComponent(nodeId)}`,
+        { method: 'DELETE', headers: { Accept: 'application/json' } },
+      )
+      await readApiPayload(response)
+
+      setNodes((current) => current.filter((node) => node.id !== nodeId))
+      setEdges((current) =>
+        current.filter(
+          (edge) => edge.source !== nodeId && edge.target !== nodeId,
+        ),
+      )
+      setSelectedNodeId((current) => current === nodeId ? null : current)
+      setSelectedEdgeId(null)
+      markDirty()
+      setAuthoringState('deleted')
+    } catch (error) {
+      setAuthoringState('error')
+      setDesignerError(`Eliminazione fase non riuscita: ${error.message}`)
+    }
+  }, [markDirty, procedureCode, versionLabel])
 
   const handlePropertiesChange = useCallback(
     (nextProperties) => {
@@ -735,6 +851,69 @@ export default function ProcedureDesigner({
     },
     [selectedNodeId],
   )
+
+  const handlePropertiesSave = useCallback(async (nextProperties) => {
+    if (!selectedNodeId || !isPersistedPhaseId(selectedNodeId)) return
+    if (!procedureCode || !versionLabel) {
+      setDesignerError('Impossibile salvare la fase: contesto procedura/versione non disponibile.')
+      return
+    }
+
+    setAuthoringState('updating')
+    setDesignerError('')
+
+    try {
+      const response = await fetch(
+        `${buildPhasesUrl(procedureCode, versionLabel)}/${encodeURIComponent(selectedNodeId)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: nextProperties.name,
+            description: nextProperties.description || null,
+            timeout: normalizeTimeoutForApi(nextProperties.timeout),
+            retry: Number(nextProperties.retries || 0),
+            continue_on_error: nextProperties.failurePolicy === 'CONTINUE',
+            input_variables: nextProperties.inputVariables || null,
+            output_variables: nextProperties.outputVariables || null,
+          }),
+        },
+      )
+
+      const payload = await readApiPayload(response)
+      if (!payload?.node) throw new Error('Il backend non ha restituito la fase aggiornata.')
+
+      const persistedNode = mapDesignerNode(payload.node, 0)
+      setNodes((current) =>
+        current.map((node) =>
+          node.id === selectedNodeId
+            ? {
+                ...node,
+                ...persistedNode,
+                type: node.type,
+                color: node.color,
+                categoryLabel: node.categoryLabel,
+                properties: {
+                  ...nextProperties,
+                  ...persistedNode.properties,
+                },
+                phase: {
+                  ...node.phase,
+                  ...persistedNode.phase,
+                },
+              }
+            : node,
+        ),
+      )
+      setAuthoringState('updated')
+    } catch (error) {
+      setAuthoringState('error')
+      setDesignerError(`Aggiornamento fase non riuscito: ${error.message}`)
+    }
+  }, [procedureCode, selectedNodeId, versionLabel])
 
   const handleConnect = useCallback((connection) => {
     if (!connection.source || !connection.target) return
@@ -773,9 +952,31 @@ export default function ProcedureDesigner({
   const handleEdgesChange = useCallback((changes) => {
     setEdges((current) => applyEdgeChanges(changes, current))
 
+    const removedEdgeIds = changes
+      .filter((change) => change.type === 'remove')
+      .map((change) => String(change.id))
+
+    if (removedEdgeIds.length) {
+      setSelectedEdgeId((current) =>
+        current && removedEdgeIds.includes(String(current)) ? null : current,
+      )
+    }
+
     if (changes.some((change) => change.type !== 'select')) {
       markDirty()
     }
+  }, [markDirty])
+
+  const handleRemoveEdge = useCallback((edgeId) => {
+    if (!edgeId) return
+
+    setEdges((current) =>
+      current.filter((edge) => String(edge.id) !== String(edgeId)),
+    )
+    setSelectedEdgeId((current) =>
+      String(current || '') === String(edgeId) ? null : current,
+    )
+    markDirty()
   }, [markDirty])
 
   const handleSelectNode = useCallback((nodeId) => {
@@ -788,15 +989,52 @@ export default function ProcedureDesigner({
     setSelectedNodeId(null)
   }, [])
 
-  const handleClear = useCallback(() => {
+  const handleClear = useCallback(async () => {
+    if (!nodes.length) return
+    if (!window.confirm('Eliminare tutte le fasi della versione? L’operazione non è reversibile.')) return
+    if (!procedureCode || !versionLabel) {
+      setDesignerError('Impossibile svuotare il workflow: contesto procedura/versione non disponibile.')
+      return
+    }
+
+    setAuthoringState('deleting')
+    setDesignerError('')
+
+    const failures = []
+    for (const node of nodes) {
+      if (!isPersistedPhaseId(node.id)) continue
+      try {
+        const response = await fetch(
+          `${buildPhasesUrl(procedureCode, versionLabel)}/${encodeURIComponent(node.id)}`,
+          { method: 'DELETE', headers: { Accept: 'application/json' } },
+        )
+        await readApiPayload(response)
+      } catch (error) {
+        failures.push(`${node.label || node.id}: ${error.message}`)
+      }
+    }
+
+    if (failures.length) {
+      setAuthoringState('error')
+      setDesignerError(`Svuotamento incompleto: ${failures.join(' · ')}`)
+      return
+    }
+
     setNodes([])
     setEdges([])
     setSelectedNodeId(null)
     setSelectedEdgeId(null)
     markDirty()
-  }, [markDirty])
+    setAuthoringState('deleted')
+  }, [markDirty, nodes, procedureCode, versionLabel])
 
   const persistenceLabel = useMemo(() => {
+    if (authoringState === 'creating') return 'Creazione fase nel backend...'
+    if (authoringState === 'updating') return 'Aggiornamento proprietà nel backend...'
+    if (authoringState === 'deleting') return 'Eliminazione fase dal backend...'
+    if (authoringState === 'created') return 'Fase creata nel backend'
+    if (authoringState === 'updated') return 'Proprietà salvate nel backend'
+    if (authoringState === 'deleted') return 'Fase eliminata dal backend'
     if (loadState === 'loading') return 'Caricamento workflow dal backend...'
     if (saveState === 'pending') return 'Modifiche in attesa di salvataggio...'
     if (saveState === 'saving') return 'Salvataggio automatico...'
@@ -804,10 +1042,10 @@ export default function ProcedureDesigner({
     if (loadState === 'fallback') return 'Modalità locale: contesto API non disponibile'
     if (loadState === 'error' || saveState === 'error') return designerError
     return 'Workflow sincronizzato con il backend'
-  }, [designerError, loadState, saveState])
+  }, [authoringState, designerError, loadState, saveState])
 
   const persistenceColor =
-    loadState === 'error' || saveState === 'error'
+    loadState === 'error' || saveState === 'error' || authoringState === 'error'
       ? '#B91C1C'
       : saveState === 'saved'
         ? '#15803D'
@@ -867,13 +1105,14 @@ export default function ProcedureDesigner({
           onClear={handleClear}
           onConnect={handleConnect}
           onEdgesChange={handleEdgesChange}
+          onRemoveEdge={handleRemoveEdge}
         />
 
         <PropertiesPanel
           selectedStep={selectedNode}
           value={selectedNode?.properties}
           onChange={handlePropertiesChange}
-          onSave={handlePropertiesChange}
+          onSave={handlePropertiesSave}
         />
       </Box>
     </WorkspaceTemplate>
