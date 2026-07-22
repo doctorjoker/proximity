@@ -13,6 +13,7 @@ from .repository import (
     update_phase,
 )
 
+from .validation import validate_procedure
 
 def service_list_procedures():
     return list_procedures()
@@ -64,3 +65,10 @@ def service_update_phase(code: str, version: str, phase_id: int, payload):
 
 def service_delete_phase(code: str, version: str, phase_id: int):
     return delete_phase(code, version, phase_id)
+
+def service_validate_procedure(code: str, version: str):
+    designer = get_designer(code, version)
+    if not designer:
+        return None
+
+    return validate_procedure(designer)

@@ -36,6 +36,34 @@ import {
   IconWifi,
 } from '@tabler/icons-react'
 
+const actionStep = (id, label, description, icon, runtimeCategory, action) => ({
+  id,
+  label,
+  description,
+  icon,
+  phaseType: 'ACTION',
+  runtimeCategory,
+  action,
+})
+
+const structuralStep = (
+  id,
+  label,
+  description,
+  icon,
+  phaseType,
+  runtimeCategory,
+  action,
+) => ({
+  id,
+  label,
+  description,
+  icon,
+  phaseType,
+  runtimeCategory,
+  action,
+})
+
 const STEP_GROUPS = [
   {
     id: 'provisioning',
@@ -44,10 +72,10 @@ const STEP_GROUPS = [
     color: '#2563EB',
     icon: IconSettingsAutomation,
     items: [
-      { id: 'router-config', label: 'Configura router', description: 'Applica configurazioni al CPE', icon: IconRouter },
-      { id: 'pppoe-config', label: 'Configura PPPoE', description: 'Imposta credenziali e interfaccia', icon: IconUserCog },
-      { id: 'vlan-config', label: 'Configura VLAN', description: 'Imposta tagging e profilo servizio', icon: IconNetwork },
-      { id: 'wifi-config', label: 'Configura Wi-Fi', description: 'SSID, sicurezza e canali radio', icon: IconWifi },
+      actionStep('router-config', 'Configura router', 'Applica configurazioni al CPE', IconRouter, 'ACS', 'router_config'),
+      actionStep('pppoe-config', 'Configura PPPoE', 'Imposta credenziali e interfaccia', IconUserCog, 'ACS', 'provision_pppoe'),
+      actionStep('vlan-config', 'Configura VLAN', 'Imposta tagging e profilo servizio', IconNetwork, 'ACS', 'configure_vlan'),
+      actionStep('wifi-config', 'Configura Wi-Fi', 'SSID, sicurezza e canali radio', IconWifi, 'ACS', 'configure_wifi'),
     ],
   },
   {
@@ -57,9 +85,9 @@ const STEP_GROUPS = [
     color: '#0891B2',
     icon: IconCloudCog,
     items: [
-      { id: 'acs-refresh', label: 'Aggiorna parametri', description: 'Richiede un refresh dei parametri', icon: IconRefresh },
-      { id: 'acs-reboot', label: 'Riavvia dispositivo', description: 'Invia il comando di reboot', icon: IconPower },
-      { id: 'acs-verify', label: 'Verifica configurazione', description: 'Controlla i valori runtime', icon: IconShieldCheck },
+      actionStep('acs-refresh', 'Aggiorna parametri', 'Richiede un refresh dei parametri', IconRefresh, 'ACS', 'refresh_parameters'),
+      actionStep('acs-reboot', 'Riavvia dispositivo', 'Invia il comando di reboot', IconPower, 'ACS', 'reboot_device'),
+      actionStep('acs-verify', 'Verifica configurazione', 'Controlla i valori runtime', IconShieldCheck, 'VALIDATION', 'verify_runtime'),
     ],
   },
   {
@@ -69,8 +97,8 @@ const STEP_GROUPS = [
     color: '#7C3AED',
     icon: IconDeviceDesktopCog,
     items: [
-      { id: 'firmware-upgrade', label: 'Aggiorna firmware', description: 'Avvia il download e l’upgrade', icon: IconDeviceFloppy },
-      { id: 'firmware-verify', label: 'Verifica versione', description: 'Controlla la versione installata', icon: IconVersions },
+      actionStep('firmware-upgrade', 'Aggiorna firmware', 'Avvia il download e l’upgrade', IconDeviceFloppy, 'ACS', 'firmware_upgrade'),
+      actionStep('firmware-verify', 'Verifica versione', 'Controlla la versione installata', IconVersions, 'VALIDATION', 'verify_firmware_version'),
     ],
   },
   {
@@ -80,9 +108,9 @@ const STEP_GROUPS = [
     color: '#D97706',
     icon: IconUserCog,
     items: [
-      { id: 'customer-email', label: 'Invia e-mail', description: 'Invia una comunicazione al cliente', icon: IconMail },
-      { id: 'customer-sms', label: 'Invia SMS', description: 'Invia una notifica testuale', icon: IconMessage },
-      { id: 'customer-ticket', label: 'Crea ticket', description: 'Apre una richiesta di assistenza', icon: IconTicket },
+      actionStep('customer-email', 'Invia e-mail', 'Invia una comunicazione al cliente', IconMail, 'OSS', 'send_customer_email'),
+      actionStep('customer-sms', 'Invia SMS', 'Invia una notifica testuale', IconMessage, 'OSS', 'send_customer_sms'),
+      actionStep('customer-ticket', 'Crea ticket', 'Apre una richiesta di assistenza', IconTicket, 'OSS', 'create_customer_ticket'),
     ],
   },
   {
@@ -92,9 +120,9 @@ const STEP_GROUPS = [
     color: '#DC2626',
     icon: IconGitBranch,
     items: [
-      { id: 'logic-if', label: 'Condizione IF', description: 'Dirama il flusso su una condizione', icon: IconGitBranch },
-      { id: 'logic-delay', label: 'Attesa', description: 'Sospende temporaneamente il flusso', icon: IconClockPause },
-      { id: 'logic-retry', label: 'Retry', description: 'Ripete una fase in errore', icon: IconRepeat },
+      structuralStep('logic-if', 'Condizione IF', 'Dirama il flusso su una condizione', IconGitBranch, 'DECISION', 'VALIDATION', 'evaluate_condition'),
+      structuralStep('logic-delay', 'Attesa', 'Sospende temporaneamente il flusso', IconClockPause, 'WAIT', 'EVENT', 'wait_duration'),
+      actionStep('logic-retry', 'Retry', 'Ripete una fase in errore', IconRepeat, 'CUSTOM', 'retry_phase'),
     ],
   },
   {
@@ -104,11 +132,23 @@ const STEP_GROUPS = [
     color: '#16A34A',
     icon: IconArrowsSplit,
     items: [
-      { id: 'flow-start', label: 'Start', description: 'Punto iniziale della procedura', icon: IconPlayerPlay },
-      { id: 'flow-parallel', label: 'Esecuzione parallela', description: 'Avvia più rami contemporaneamente', icon: IconArrowsSplit },
+      structuralStep('flow-start', 'Start', 'Punto iniziale della procedura', IconPlayerPlay, 'START', 'CUSTOM', 'noop'),
+      structuralStep('flow-decision', 'Decisione', 'Dirama il flusso in base a una condizione', IconGitBranch, 'DECISION', 'VALIDATION', 'evaluate_condition'),
+      structuralStep('flow-wait', 'Attesa', 'Sospende il flusso fino a un evento o timeout', IconClockPause, 'WAIT', 'EVENT', 'wait_event'),
+      structuralStep('flow-end', 'Fine', 'Punto conclusivo della procedura', IconPower, 'END', 'CUSTOM', 'noop'),
+      actionStep('flow-parallel', 'Esecuzione parallela', 'Avvia più rami contemporaneamente', IconArrowsSplit, 'CUSTOM', 'parallel_execution'),
     ],
   },
 ]
+
+function enrichStep(item, group) {
+  return {
+    ...item,
+    category: group.id,
+    categoryLabel: group.label,
+    color: group.color,
+  }
+}
 
 function StepItem({ item, color, group, onSelect }) {
   const ItemIcon = item.icon
@@ -128,12 +168,7 @@ function StepItem({ item, color, group, onSelect }) {
       onDragStart={(event) => {
         event.dataTransfer.setData(
           'application/proximity-step',
-          JSON.stringify({
-            ...item,
-            category: group.id,
-            categoryLabel: group.label,
-            color: group.color,
-          }),
+          JSON.stringify(enrichStep(item, group)),
         )
         event.dataTransfer.effectAllowed = 'copy'
       }}
@@ -213,7 +248,14 @@ export default function StepExplorer({ onSelectStep }) {
     return STEP_GROUPS.map((group) => ({
       ...group,
       items: group.items.filter((item) =>
-        [item.label, item.description, group.label]
+        [
+          item.label,
+          item.description,
+          item.phaseType,
+          item.runtimeCategory,
+          item.action,
+          group.label,
+        ]
           .join(' ')
           .toLowerCase()
           .includes(normalizedQuery),
@@ -369,12 +411,7 @@ export default function StepExplorer({ onSelectStep }) {
                       color={group.color}
                       group={group}
                       onSelect={(selectedItem) =>
-                        onSelectStep?.({
-                          ...selectedItem,
-                          category: group.id,
-                          categoryLabel: group.label,
-                          color: group.color,
-                        })
+                        onSelectStep?.(enrichStep(selectedItem, group))
                       }
                     />
                   ))}

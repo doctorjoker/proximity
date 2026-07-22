@@ -733,8 +733,9 @@ export default function ProcedureDesigner({
         body: JSON.stringify({
           name: step.label,
           description: step.description || null,
-          phase_type: phaseTypeForStep(step),
-          handler: step.id,
+          type: step.phaseType || phaseTypeForStep(step),
+          category: step.runtimeCategory || 'CUSTOM',
+          action: step.action || step.id,
           position: targetPosition,
         }),
       })
@@ -759,8 +760,23 @@ export default function ProcedureDesigner({
         },
         phase: {
           ...createdNode.phase,
-          category: step.category,
-          handler: step.id,
+          type:
+            step.phaseType ||
+            createdNode.phase?.type ||
+            'ACTION',
+          category:
+            step.runtimeCategory ||
+            createdNode.phase?.category ||
+            'CUSTOM',
+          action:
+            step.action ||
+            createdNode.phase?.action ||
+            step.id,
+          handler:
+            step.action ||
+            createdNode.phase?.handler ||
+            step.id,
+          explorerCategory: step.category,
         },
       }
 

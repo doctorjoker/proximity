@@ -44,8 +44,9 @@ class ProcedureDesignerSaveRequest(BaseModel):
 
 class ProcedurePhaseCreateRequest(BaseModel):
     name: str
+    type: str = "ACTION"
+    category: str = "CUSTOM"
     action: str = "noop"
-    type: str = "Action"
     timeout: str = "30s"
     retry: int = Field(default=0, ge=0)
     status: str = "DRAFT"
@@ -61,8 +62,9 @@ class ProcedurePhaseCreateRequest(BaseModel):
 
 class ProcedurePhaseUpdateRequest(BaseModel):
     name: Optional[str] = None
-    action: Optional[str] = None
     type: Optional[str] = None
+    category: Optional[str] = None
+    action: Optional[str] = None
     timeout: Optional[str] = None
     retry: Optional[int] = Field(default=None, ge=0)
     status: Optional[str] = None

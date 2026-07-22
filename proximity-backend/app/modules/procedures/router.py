@@ -19,6 +19,7 @@ from .service import (
     service_save_designer,
     service_test_procedure,
     service_update_phase,
+    service_validate_procedure,
 )
 
 
@@ -168,6 +169,21 @@ def api_delete_phase(code: str, version: str, phase_id: int):
         "deleted": result,
     }
 
+
+@router.post("/{code}/versions/{version}/validate")
+def api_validate_procedure(code: str, version: str):
+    result = service_validate_procedure(code, version)
+
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Procedure version not found",
+        )
+
+    return {
+        "success": True,
+        **result,
+    }
 
 @router.post("/{code}/versions/{version}/test")
 def api_test_procedure(code: str, version: str, payload: ProcedureTestRequest):

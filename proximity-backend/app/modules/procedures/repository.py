@@ -12,6 +12,54 @@ def get_conn():
     return psycopg2.connect(DATABASE_URL)
 
 
+BPM_PHASE_TYPES = {"START", "ACTION", "DECISION", "WAIT", "END"}
+LEGACY_PHASE_CATEGORIES = {
+    "VALIDATION",
+    "INVENTORY",
+    "ACS",
+    "ASSURANCE",
+    "OSS",
+    "EVENT",
+    "SYSTEM",
+    "CUSTOM",
+}
+
+
+def _normalize_phase_type_and_category(phase_type, category=None):
+    raw_type = str(phase_type or "ACTION").strip().upper()
+    raw_category = str(category or "").strip().upper() or None
+
+    # Historical records used `type` as the functional category.
+    if raw_type in LEGACY_PHASE_CATEGORIES and raw_type not in BPM_PHASE_TYPES:
+        return "ACTION", raw_category or raw_type
+
+    normalized_type = raw_type if raw_type in BPM_PHASE_TYPES else "ACTION"
+
+    if raw_category:
+        normalized_category = raw_category
+    elif normalized_type in {"START", "DECISION", "WAIT", "END"}:
+        normalized_category = "SYSTEM"
+    else:
+        normalized_category = "CUSTOM"
+
+    return normalized_type, normalized_category
+
+
+def _normalize_phase_record(phase):
+    if not phase:
+        return phase
+
+    phase_data = dict(phase)
+    phase_type, category = _normalize_phase_type_and_category(
+        phase_data.get("type"),
+        phase_data.get("category"),
+    )
+    phase_data["type"] = phase_type
+    phase_data["category"] = category
+    phase_data["action"] = phase_data.get("action") or "noop"
+    return phase_data
+
+
 def list_procedures():
     with get_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -171,7 +219,7 @@ def list_phases(code: str, version: str):
                 WHERE version_id = %s
                 ORDER BY phase_order ASC
             """, (version_id,))
-            return cur.fetchall()
+            return [_normalize_phase_record(row) for row in cur.fetchall()]
 
 
 def list_variables(code: str, version: str):
@@ -238,7 +286,7 @@ def get_designer(code: str, version: str):
 
     nodes = []
     for phase in phases:
-        phase_data = dict(phase)
+        phase_data = _normalize_phase_record(phase)
         nodes.append({
             "id": str(phase_data["id"]),
             "position": {
@@ -455,7 +503,7 @@ def _phase_to_designer_node(phase):
     if not phase:
         return None
 
-    phase_data = dict(phase)
+    phase_data = _normalize_phase_record(phase)
     return {
         "id": str(phase_data["id"]),
         "position": {
@@ -474,6 +522,10 @@ def create_phase(code: str, version: str, payload):
     data = payload.dict(exclude_unset=True)
     position = data.pop("position", None) or {}
     requested_order = data.pop("phase_order", None)
+    phase_type, category = _normalize_phase_type_and_category(
+        data.get("type"),
+        data.get("category"),
+    )
 
     with get_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -509,6 +561,7 @@ def create_phase(code: str, version: str, payload):
                     name,
                     action,
                     type,
+                    category,
                     timeout,
                     retry,
                     status,
@@ -527,6 +580,7 @@ def create_phase(code: str, version: str, payload):
                     %(name)s,
                     %(action)s,
                     %(type)s,
+                    %(category)s,
                     %(timeout)s,
                     %(retry)s,
                     %(status)s,
@@ -545,7 +599,8 @@ def create_phase(code: str, version: str, payload):
                 "phase_order": phase_order,
                 "name": data.get("name"),
                 "action": data.get("action", "noop"),
-                "type": data.get("type", "Action"),
+                "type": phase_type,
+                "category": category,
                 "timeout": data.get("timeout", "30s"),
                 "retry": data.get("retry", 0),
                 "status": data.get("status", "DRAFT"),
@@ -585,6 +640,7 @@ def update_phase(code: str, version: str, phase_id: int, payload):
         "name",
         "action",
         "type",
+        "category",
         "timeout",
         "retry",
         "status",
@@ -610,6 +666,14 @@ def update_phase(code: str, version: str, phase_id: int, payload):
             current = cur.fetchone()
             if not current:
                 return False
+
+            if "type" in changes or "category" in changes:
+                normalized_type, normalized_category = _normalize_phase_type_and_category(
+                    changes.get("type", current.get("type")),
+                    changes.get("category", current.get("category")),
+                )
+                changes["type"] = normalized_type
+                changes["category"] = normalized_category
 
             assignments = []
             values = []
