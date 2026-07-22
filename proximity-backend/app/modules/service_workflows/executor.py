@@ -4,9 +4,10 @@ from .runner import WorkflowRunner
 
 from .registry import WORKFLOW_HANDLERS_REGISTRY
 
-from .definitions import WORKFLOW_DEFINITIONS
+from .definition_loader import load_workflow_definition
 
 from .models import WorkflowInstance
+
 
 class WorkflowExecutor:
 
@@ -37,9 +38,11 @@ class WorkflowExecutor:
             progress=workflow["progress"],
         )
 
-        workflow_definition = WORKFLOW_DEFINITIONS[workflow_type]
+        workflow_definition = load_workflow_definition(
+            workflow_type,
+        )
 
         return await self.runner.run(
-           workflow=instance,
-           workflow_definition=workflow_definition,
-       )
+            workflow=instance,
+            workflow_definition=workflow_definition,
+        )

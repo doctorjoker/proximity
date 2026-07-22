@@ -11,11 +11,15 @@ import { useNavigate } from 'react-router-dom';
 
 import AppLayout from '../components/layout/AppLayout';
 import AttentionPanel from '../components/dashboard/AttentionPanel';
-import ControlKpiCard from '../components/dashboard/ControlKpiCard';
-import DashboardSection from '../components/dashboard/DashboardSection';
 import PlatformHealthCard from '../components/dashboard/PlatformHealthCard';
 import QuickActions from '../components/dashboard/QuickActions';
 import RecentExecutions from '../components/dashboard/RecentExecutions';
+import {
+  KpiCard,
+  KpiGrid,
+  WorkspacePage,
+  WorkspaceSection,
+} from '../components/proximity';
 import { loadControlCenter } from '../services/controlCenterService';
 
 function statusOf(item) {
@@ -60,54 +64,52 @@ export default function ProximityControlCenter() {
 
   return (
     <AppLayout>
-      <Box sx={{ maxWidth: 1560, mx: 'auto' }}>
-        <Stack spacing={2.4}>
-          <PlatformHealthCard health={data.health} errors={data.errors} />
-          <QuickActions />
+      <WorkspacePage spacing={2.4}>
+        <PlatformHealthCard health={data.health} errors={data.errors} />
+        <QuickActions />
 
-          {error && <Alert severity="error">{error}</Alert>}
+        {error && <Alert severity="error">{error}</Alert>}
 
-          {loading ? (
-            <Stack alignItems="center" spacing={1.5} sx={{ py: 8 }}>
-              <CircularProgress />
-            </Stack>
-          ) : (
-            <>
-              <DashboardSection
-                eyebrow="Automation"
-                title="Procedure e Runtime"
-                description="Stato operativo del motore, esecuzioni recenti e criticità."
-                action={
-                  <Button startIcon={<RefreshIcon />} onClick={() => load()} sx={{ textTransform: 'none', fontWeight: 800 }}>
-                    Aggiorna
-                  </Button>
-                }
-              >
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', xl: 'repeat(4, 1fr)' }, gap: 2 }}>
-                  <ControlKpiCard label="Procedure attive" value={summary.activeProcedures} helper="Catalogo pubblicato" icon={AccountTreeIcon} actionLabel="Vai alle procedure" onClick={() => navigate('/procedures')} />
-                  <ControlKpiCard label="In esecuzione" value={summary.running} helper="Queued, running o retry" icon={PlayCircleIcon} tone="cyan" actionLabel="Vai alle esecuzioni" onClick={() => navigate('/procedure-executions')} />
-                  <ControlKpiCard label="Fallite" value={summary.failed} helper="Richiedono verifica" icon={ErrorIcon} tone={summary.failed ? 'error' : 'success'} actionLabel="Analizza errori" onClick={() => navigate('/procedure-executions')} />
-                  <ControlKpiCard label="Esecuzioni caricate" value={data.executions.length} helper="Ultime attività runtime" icon={PlayCircleIcon} tone="success" actionLabel="Apri il centro" onClick={() => navigate('/procedure-executions')} />
-                </Box>
-              </DashboardSection>
+        {loading ? (
+          <Stack alignItems="center" spacing={1.5} sx={{ py: 8 }}>
+            <CircularProgress />
+          </Stack>
+        ) : (
+          <>
+            <WorkspaceSection
+              eyebrow="Automation"
+              title="Procedure e Runtime"
+              description="Stato operativo del motore, esecuzioni recenti e criticità."
+              action={
+                <Button startIcon={<RefreshIcon />} onClick={() => load()} sx={{ textTransform: 'none', fontWeight: 800 }}>
+                  Aggiorna
+                </Button>
+              }
+            >
+              <KpiGrid>
+                <KpiCard label="Procedure attive" value={summary.activeProcedures} helper="Catalogo pubblicato" icon={AccountTreeIcon} actionLabel="Vai alle procedure" onClick={() => navigate('/procedures')} />
+                <KpiCard label="In esecuzione" value={summary.running} helper="Queued, running o retry" icon={PlayCircleIcon} tone="cyan" actionLabel="Vai alle esecuzioni" onClick={() => navigate('/procedure-executions')} />
+                <KpiCard label="Fallite" value={summary.failed} helper="Richiedono verifica" icon={ErrorIcon} tone={summary.failed ? 'error' : 'success'} actionLabel="Analizza errori" onClick={() => navigate('/procedure-executions')} />
+                <KpiCard label="Esecuzioni caricate" value={data.executions.length} helper="Ultime attività runtime" icon={PlayCircleIcon} tone="success" actionLabel="Apri il centro" onClick={() => navigate('/procedure-executions')} />
+              </KpiGrid>
+            </WorkspaceSection>
 
-              <DashboardSection eyebrow="Operations" title="Customer Network Operations" description="Indicatori principali di apparati, clienti e firmware.">
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', xl: 'repeat(4, 1fr)' }, gap: 2 }}>
-                  <ControlKpiCard label="Customers" value="—" helper="Vista cliente unificata" icon={GroupsIcon} tone="cyan" actionLabel="Vai ai clienti" onClick={() => navigate('/customers')} />
-                  <ControlKpiCard label="Devices" value={summary.devices} helper="Inventario caricato" icon={DevicesIcon} actionLabel="Vai ai device" onClick={() => navigate('/devices')} />
-                  <ControlKpiCard label="Firmware jobs aperti" value={summary.firmwareJobs} helper="Job non completati" icon={MemoryIcon} tone={summary.firmwareJobs ? 'warning' : 'success'} actionLabel="Vai al firmware" onClick={() => navigate('/firmware')} />
-                  <ControlKpiCard label="Diagnostics" value="—" helper="Assurance e diagnostica" icon={ErrorIcon} tone="success" actionLabel="Apri diagnostica" onClick={() => navigate('/diagnostics')} />
-                </Box>
-              </DashboardSection>
+            <WorkspaceSection eyebrow="Operations" title="Customer Network Operations" description="Indicatori principali di apparati, clienti e firmware.">
+              <KpiGrid>
+                <KpiCard label="Customers" value="—" helper="Vista cliente unificata" icon={GroupsIcon} tone="cyan" actionLabel="Vai ai clienti" onClick={() => navigate('/customers')} />
+                <KpiCard label="Devices" value={summary.devices} helper="Inventario caricato" icon={DevicesIcon} actionLabel="Vai ai device" onClick={() => navigate('/devices')} />
+                <KpiCard label="Firmware jobs aperti" value={summary.firmwareJobs} helper="Job non completati" icon={MemoryIcon} tone={summary.firmwareJobs ? 'warning' : 'success'} actionLabel="Vai al firmware" onClick={() => navigate('/firmware')} />
+                <KpiCard label="Diagnostics" value="—" helper="Assurance e diagnostica" icon={ErrorIcon} tone="success" actionLabel="Apri diagnostica" onClick={() => navigate('/diagnostics')} />
+              </KpiGrid>
+            </WorkspaceSection>
 
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'minmax(0, 1.6fr) minmax(360px, 0.9fr)' }, gap: 2.4 }}>
-                <RecentExecutions items={data.executions} />
-                <AttentionPanel executions={data.executions} errors={data.errors} />
-              </Box>
-            </>
-          )}
-        </Stack>
-      </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'minmax(0, 1.6fr) minmax(360px, 0.9fr)' }, gap: 2.4 }}>
+              <RecentExecutions items={data.executions} />
+              <AttentionPanel executions={data.executions} errors={data.errors} />
+            </Box>
+          </>
+        )}
+      </WorkspacePage>
     </AppLayout>
   );
 }

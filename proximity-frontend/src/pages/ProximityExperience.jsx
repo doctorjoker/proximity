@@ -48,9 +48,7 @@ import {
   Wifi,
 } from "@mui/icons-material";
 
-const API_BASE = window.location.hostname
-  ? `http://${window.location.hostname}:8010`
-  : "http://10.40.0.22:8010";
+const API_BASE = "";
 
 const accent = "#2563eb";
 const navy = "#0f172a";

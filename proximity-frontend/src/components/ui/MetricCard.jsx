@@ -1,63 +1,61 @@
-import { Box, Stack, Typography } from "@mui/material";
-import SurfaceCard from "./SurfaceCard";
+import PropTypes from "prop-types";
+import { Box, Card, CardContent, Skeleton, Stack, Typography } from "@mui/material";
+import TrendingDownRoundedIcon from "@mui/icons-material/TrendingDownRounded";
+import TrendingUpRoundedIcon from "@mui/icons-material/TrendingUpRounded";
 
-const tones = {
-  blue: { bg: "#eff6ff", fg: "#2563eb", border: "#dbeafe" },
-  green: { bg: "#ecfdf5", fg: "#16a34a", border: "#bbf7d0" },
-  amber: { bg: "#fff7ed", fg: "#d97706", border: "#fed7aa" },
-  red: { bg: "#fef2f2", fg: "#dc2626", border: "#fecaca" },
-  slate: { bg: "#f8fafc", fg: "#475569", border: "#e2e8f0" },
-};
+export default function MetricCard({ label, value, icon: Icon, helper, trend, loading = false, onClick }) {
+  const positive = Number(trend) >= 0;
+  const TrendIcon = positive ? TrendingUpRoundedIcon : TrendingDownRoundedIcon;
 
-export default function MetricCard({ icon, label, value, helper, tone = "blue", actionLabel, onClick }) {
-  const palette = tones[tone] || tones.blue;
   return (
-    <SurfaceCard
+    <Card
       onClick={onClick}
       sx={{
         height: "100%",
         cursor: onClick ? "pointer" : "default",
-        transition: "transform .16s ease, box-shadow .16s ease, border-color .16s ease",
-        "&:hover": onClick
-          ? { transform: "translateY(-1px)", boxShadow: "0 16px 34px rgba(15,23,42,.08)", borderColor: palette.border }
-          : undefined,
+        transition: "transform 160ms ease, box-shadow 160ms ease",
+        "&:hover": onClick ? { transform: "translateY(-1px)", boxShadow: 4 } : undefined,
       }}
     >
-      <Stack direction="row" spacing={1.6} alignItems="stretch" sx={{ minHeight: 122, p: 1.8 }}>
-        <Box
-          sx={{
-            width: 56,
-            height: 56,
-            mt: 0.15,
-            display: "grid",
-            placeItems: "center",
-            bgcolor: palette.bg,
-            color: palette.fg,
-            border: `1px solid ${palette.border}`,
-            borderRadius: 2.4,
-            flexShrink: 0,
-          }}
-        >
-          {icon}
-        </Box>
-
-        <Stack sx={{ minWidth: 0, flex: 1 }}>
-          <Typography sx={{ color: "#475569", fontSize: 12, fontWeight: 900, textTransform: "uppercase", letterSpacing: 0.55 }}>
-            {label}
-          </Typography>
-          <Typography sx={{ color: "#0f172a", fontSize: 33, fontWeight: 950, lineHeight: 1.05, mt: 0.35 }}>
-            {value}
-          </Typography>
-          <Typography sx={{ color: "#64748b", fontSize: 12, mt: 0.55 }} noWrap>
-            {helper}
-          </Typography>
-          {actionLabel ? (
-            <Typography sx={{ color: "#2563eb", fontSize: 12, fontWeight: 900, mt: "auto", pt: 0.7, textAlign: "left" }}>
-              {actionLabel} →
-            </Typography>
-          ) : null}
+      <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
+        <Stack direction="row" justifyContent="space-between" spacing={1.5}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="body2" color="text.secondary" fontWeight={650}>{label}</Typography>
+            {loading ? (
+              <Skeleton width={90} height={40} />
+            ) : (
+              <Typography variant="h5" sx={{ mt: 0.5, fontVariantNumeric: "tabular-nums" }}>{value}</Typography>
+            )}
+          </Box>
+          {Icon && (
+            <Box sx={{ width: 38, height: 38, display: "grid", placeItems: "center", borderRadius: 1.5, bgcolor: "action.hover", color: "primary.main" }}>
+              <Icon fontSize="small" />
+            </Box>
+          )}
         </Stack>
-      </Stack>
-    </SurfaceCard>
+
+        {(helper || trend !== undefined) && (
+          <Stack direction="row" spacing={0.8} alignItems="center" sx={{ mt: 1.2 }}>
+            {trend !== undefined && (
+              <Stack direction="row" spacing={0.2} alignItems="center" color={positive ? "success.main" : "error.main"}>
+                <TrendIcon sx={{ fontSize: 17 }} />
+                <Typography variant="caption" fontWeight={800}>{Math.abs(Number(trend))}%</Typography>
+              </Stack>
+            )}
+            {helper && <Typography variant="caption" color="text.secondary">{helper}</Typography>}
+          </Stack>
+        )}
+      </CardContent>
+    </Card>
   );
 }
+
+MetricCard.propTypes = {
+  label: PropTypes.string.isRequired,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  icon: PropTypes.elementType,
+  helper: PropTypes.string,
+  trend: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  loading: PropTypes.bool,
+  onClick: PropTypes.func,
+};

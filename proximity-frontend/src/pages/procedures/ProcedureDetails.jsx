@@ -811,6 +811,21 @@ export default function ProcedureVersionDetails() {
     <VariablesTab key="variables" items={variablesData} onCreateVariable={handleCreateVariable} onEditVariable={handleEditVariable} onDeleteVariable={handleDeleteVariable} />,
     <TestTab key="test" procedure={procedure} version={version} phases={phasesData} />,
     <AuditTab key="audit" />,
+    <Box
+      key="designer"
+      sx={{
+        py: 10,
+        px: 2,
+        textAlign: "center",
+      }}
+    >
+      <Typography variant="h4" fontWeight={900}>
+        Procedure Designer
+      </Typography>
+      <Typography color="text.secondary" sx={{ mt: 1 }}>
+        React Flow verrà integrato qui nella milestone EUREKA 12.2.2.
+      </Typography>
+    </Box>,
   ];
 
   return (
@@ -858,6 +873,7 @@ export default function ProcedureVersionDetails() {
                     <Tab label="Variabili" />
                     <Tab label="Test" />
                     <Tab label="Audit" />
+                    <Tab label="Designer" />
                   </Tabs>
                 </Box>
                 <Divider />

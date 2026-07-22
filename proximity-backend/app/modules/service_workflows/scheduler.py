@@ -12,6 +12,8 @@ from app.modules.service_workflows.lock_repository import (
     acquire_lock,
     release_locks,
 )
+from app.modules.service_workflows.worker_identity import WORKER_ID
+
 
 DEFAULT_RETRY_POLICY = {
     "max_retry": 3,
@@ -177,7 +179,7 @@ async def schedule_next_workflow():
             event_status="WAITING",
             title="Workflow waiting",
             description="Service is already locked",
-            worker_name="PROXIMITY-WORKER",
+            worker_name="WORKER_ID",
         )
 
         _reschedule_or_fail(
@@ -203,7 +205,7 @@ async def schedule_next_workflow():
             f"SERVICE {workflow['service_code']} locked "
             "for workflow execution"
         ),
-        worker_name="PROXIMITY-WORKER",
+        worker_name="WORKER_ID",
         metadata={
             "resource_type": "SERVICE",
             "resource_id": workflow["service_code"],
@@ -216,7 +218,7 @@ async def schedule_next_workflow():
         event_status="RUNNING",
         title="Workflow running",
         description="Worker started workflow execution",
-        worker_name="PROXIMITY-WORKER",
+        worker_name="WORKER_ID",
     )
 
     try:
@@ -235,7 +237,7 @@ async def schedule_next_workflow():
                 event_status="FAILED",
                 title="Workflow failed",
                 description=failure_reason,
-                worker_name="PROXIMITY-WORKER",
+                worker_name="WORKER_ID",
                 metadata=result,
             )
 
@@ -251,7 +253,7 @@ async def schedule_next_workflow():
                 event_status="SUCCESS",
                 title="Workflow completed",
                 description="Workflow completed successfully",
-                worker_name="PROXIMITY-WORKER",
+                worker_name="WORKER_ID",
                 metadata=result,
             )
 
@@ -268,7 +270,7 @@ async def schedule_next_workflow():
             event_status="FAILED",
             title="Workflow exception",
             description=str(exc),
-            worker_name="PROXIMITY-WORKER",
+            worker_name="WORKER_ID",
             metadata={
                 "exception": str(exc),
             },
@@ -296,7 +298,7 @@ async def schedule_next_workflow():
                 description=(
                     f"SERVICE {workflow['service_code']} unlocked"
                 ),
-                worker_name="PROXIMITY-WORKER",
+                worker_name="WORKER_ID",
                 metadata={
                     "resource_type": "SERVICE",
                     "resource_id": workflow["service_code"],

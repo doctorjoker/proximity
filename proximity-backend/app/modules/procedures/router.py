@@ -1,12 +1,18 @@
 from fastapi import APIRouter, HTTPException
 
-from .schemas import ProcedureCreate, ProcedureTestRequest
+from .schemas import (
+    ProcedureCreate,
+    ProcedureDesignerSaveRequest,
+    ProcedureTestRequest,
+)
 from .service import (
     service_create_procedure,
+    service_get_designer,
     service_get_procedure,
     service_get_version_detail,
     service_list_procedures,
     service_list_versions,
+    service_save_designer,
     service_test_procedure,
 )
 
@@ -59,6 +65,38 @@ def api_list_versions(code: str):
 @router.get("/{code}/versions/{version}")
 def api_get_version_detail(code: str, version: str):
     detail = service_get_version_detail(code, version)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Procedure version not found")
+
+    return {
+        "success": True,
+        **detail,
+    }
+
+
+@router.get("/{code}/versions/{version}/designer")
+def api_get_designer(code: str, version: str):
+    detail = service_get_designer(code, version)
+    if not detail:
+        raise HTTPException(status_code=404, detail="Procedure version not found")
+
+    return {
+        "success": True,
+        **detail,
+    }
+
+
+@router.put("/{code}/versions/{version}/designer")
+def api_save_designer(
+    code: str,
+    version: str,
+    payload: ProcedureDesignerSaveRequest,
+):
+    try:
+        detail = service_save_designer(code, version, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     if not detail:
         raise HTTPException(status_code=404, detail="Procedure version not found")
 

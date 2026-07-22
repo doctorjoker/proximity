@@ -1,11 +1,13 @@
 from .repository import (
     create_procedure,
     create_test_execution,
+    get_designer,
     get_procedure,
     get_version_detail,
     list_execution_logs,
     list_procedures,
     list_versions,
+    save_designer,
 )
 
 
@@ -27,6 +29,14 @@ def service_list_versions(code: str):
 
 def service_get_version_detail(code: str, version: str):
     return get_version_detail(code, version)
+
+
+def service_get_designer(code: str, version: str):
+    return get_designer(code, version)
+
+
+def service_save_designer(code: str, version: str, payload):
+    return save_designer(code, version, payload)
 
 
 def service_test_procedure(code: str, version: str, payload):

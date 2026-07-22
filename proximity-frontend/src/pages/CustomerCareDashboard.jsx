@@ -29,10 +29,7 @@ import {
   DevicesOther,
 } from "@mui/icons-material";
 
-const API_BASE =
-  import.meta.env?.VITE_API_BASE_URL ||
-  import.meta.env?.VITE_API_BASE ||
-  "http://10.40.0.22:8010";
+const API_BASE = "";
 
 const navy = "#0f172a";
 const muted = "#64748b";

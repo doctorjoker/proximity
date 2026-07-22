@@ -1,707 +1,186 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Button, Snackbar, Alert } from '@mui/material'
+import AccountTreeIcon from '@mui/icons-material/AccountTree'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import EditNoteIcon from '@mui/icons-material/EditNote'
+import HistoryIcon from '@mui/icons-material/History'
+import RefreshIcon from '@mui/icons-material/Refresh'
+import { useNavigate } from 'react-router-dom'
 
+import AppLayout from '../../components/layout/AppLayout'
+import ProcedureCatalogTable, { catalogMetadata } from '../../components/procedures/ProcedureCatalogTable'
+import ProcedureCatalogToolbar from '../../components/procedures/ProcedureCatalogToolbar'
 import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  Chip,
-  CircularProgress,
-  Divider,
-  Grid,
-  IconButton,
-  InputAdornment,
-  Menu,
-  MenuItem,
-  Stack,
-  TextField,
-  Tooltip,
-  Typography,
-} from "@mui/material";
-
-import AddIcon from "@mui/icons-material/Add";
-import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import EditNoteIcon from "@mui/icons-material/EditNote";
-import HistoryIcon from "@mui/icons-material/History";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
-import SearchIcon from "@mui/icons-material/Search";
-
-import AppLayout from "../../components/layout/AppLayout";
-import { useNavigate } from "react-router-dom";
+  ProcedureCatalogEmpty,
+  ProcedureCatalogError,
+  ProcedureCatalogLoading,
+} from '../../components/procedures/ProcedureCatalogState'
+import ProcedureDrawer360 from '../../components/procedures/ProcedureDrawer360'
 import {
-  listProcedures,
-  listVersions,
-} from "../../services/procedureService";
+  KpiCard,
+  KpiGrid,
+  WorkspacePage,
+  WorkspaceSection,
+} from '../../components/proximity'
+import { listProcedures, listVersions } from '../../services/procedureService'
 
+export default function ProcedureLibrary() {
+  const navigate = useNavigate()
+  const [procedures, setProcedures] = useState([])
+  const [versionsByCode, setVersionsByCode] = useState({})
+  const [selectedProcedure, setSelectedProcedure] = useState(null)
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('ALL')
+  const [category, setCategory] = useState('ALL')
+  const [trigger, setTrigger] = useState('ALL')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState({ open: false, message: '' })
 
-const FILTERS = [
-  { value: "ALL", label: "Tutte" },
-  { value: "PUBLISHED", label: "Attive" },
-  { value: "DRAFT", label: "Con bozza" },
-  { value: "DEPRECATED", label: "Storiche" },
-];
-
-function statusLabel(status) {
-  if (isActiveStatus(status)) return "Attiva";
-  if (isDraftStatus(status)) return "Bozza";
-  if (isDeprecatedStatus(status)) return "Storica";
-  return status || "-";
-}
-
-function statusColor(status) {
-  if (isActiveStatus(status)) return "success";
-  if (isDraftStatus(status)) return "warning";
-  if (isDeprecatedStatus(status)) return "default";
-  return "default";
-}
-
-function procedureCode(procedure) {
-  return procedure?.code || procedure?.definition_code || procedure?.procedure_code || "";
-}
-
-function isActiveStatus(status) {
-  return status === "ACTIVE" || status === "PUBLISHED" || status === "Attiva";
-}
-
-function isDraftStatus(status) {
-  return status === "DRAFT" || status === "Bozza";
-}
-
-function isDeprecatedStatus(status) {
-  return status === "DEPRECATED" || status === "HISTORICAL" || status === "Storica";
-}
-
-function operatorName(code, fallback) {
-  const names = {
-    FIRST_SERVICE_PROVISIONING: "Prima attivazione servizio",
-    ROUTER_REPLACEMENT: "Sostituzione router",
-    DEVICE_REBOOT: "Riavvio router",
-    "PROC-ROUTER-REPLACEMENT": "Sostituzione router cliente",
-  };
-
-  return names[code] || fallback || code;
-}
-
-function operatorDescription(procedure) {
-  const descriptions = {
-    FIRST_SERVICE_PROVISIONING:
-      "Provisioning iniziale di un nuovo servizio cliente.",
-    ROUTER_REPLACEMENT:
-      "Procedura per sostituzione router e riallineamento configurazione.",
-    DEVICE_REBOOT: "Riavvio remoto controllato del router cliente.",
-    "PROC-ROUTER-REPLACEMENT":
-      "Procedura automatica per sostituzione router cliente con provisioning ACS e verifica runtime.",
-  };
-
-  return (
-    descriptions[procedureCode(procedure)]
-    || procedure.description
-    || "Nessuna descrizione disponibile."
-  );
-}
-
-function getVersions(procedure, versionsByCode) {
-  return versionsByCode[procedureCode(procedure)] || [];
-}
-
-function getActiveVersion(procedure, versionsByCode) {
-  return getVersions(procedure, versionsByCode).find(
-    (version) => isActiveStatus(version.status),
-  );
-}
-
-function getDraftVersion(procedure, versionsByCode) {
-  return getVersions(procedure, versionsByCode).find(
-    (version) => isDraftStatus(version.status),
-  );
-}
-
-function getDeprecatedVersions(procedure, versionsByCode) {
-  return getVersions(procedure, versionsByCode).filter(
-    (version) => isDeprecatedStatus(version.status),
-  );
-}
-
-function formatDate(value) {
-  if (!value) return "-";
-
-  try {
-    return new Intl.DateTimeFormat("it-IT", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    }).format(new Date(value));
-  } catch (_) {
-    return "-";
-  }
-}
-
-function ProcedureHeader() {
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        borderRadius: 4,
-        border: "1px solid #e2e8f0",
-        background:
-          "linear-gradient(135deg, rgba(37,99,235,0.08), rgba(255,255,255,1) 42%)",
-      }}
-    >
-      <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
-        <Stack
-          direction={{ xs: "column", md: "row" }}
-          justifyContent="space-between"
-          alignItems={{ xs: "stretch", md: "center" }}
-          spacing={2}
-        >
-          <Box>
-            <Typography sx={{ fontSize: { xs: 28, md: 34 }, fontWeight: 950 }}>
-              Procedure Automatiche
-            </Typography>
-
-            <Typography sx={{ color: "#64748b", mt: 0.6, fontSize: 15.5 }}>
-              Gestisci i modelli procedurali utilizzati da Proximity.
-            </Typography>
-          </Box>
-
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            sx={{
-              borderRadius: 3,
-              fontWeight: 900,
-              px: 2.5,
-              py: 1.1,
-              textTransform: "none",
-              alignSelf: { xs: "flex-start", md: "center" },
-              boxShadow: "0 12px 28px rgba(37,99,235,0.25)",
-            }}
-          >
-            Nuova procedura
-          </Button>
-        </Stack>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ProcedureStats({ procedures, versionsByCode }) {
-  const stats = useMemo(() => {
-    const activeCount = procedures.filter((procedure) =>
-      Boolean(getActiveVersion(procedure, versionsByCode)),
-    ).length;
-
-    const draftCount = procedures.filter((procedure) =>
-      Boolean(getDraftVersion(procedure, versionsByCode)),
-    ).length;
-
-    const historicalCount = procedures.filter((procedure) =>
-      getDeprecatedVersions(procedure, versionsByCode).length > 0,
-    ).length;
-
-    return [
-      {
-        label: "Procedure",
-        value: procedures.length,
-        icon: <ArticleOutlinedIcon />,
-      },
-      {
-        label: "Attive",
-        value: activeCount,
-        icon: <CheckCircleIcon />,
-      },
-      {
-        label: "Con bozza",
-        value: draftCount,
-        icon: <EditNoteIcon />,
-      },
-      {
-        label: "Storiche",
-        value: historicalCount,
-        icon: <HistoryIcon />,
-      },
-    ];
-  }, [procedures, versionsByCode]);
-
-  return (
-    <Grid container spacing={2}>
-      {stats.map((item) => (
-        <Grid key={item.label} item xs={12} sm={6} lg={3}>
-          <Card
-            elevation={0}
-            sx={{
-              borderRadius: 4,
-              border: "1px solid #e2e8f0",
-              bgcolor: "#ffffff",
-              height: "100%",
-            }}
-          >
-            <CardContent sx={{ p: 2.4 }}>
-              <Stack direction="row" spacing={1.5} alignItems="center">
-                <Box
-                  sx={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 3,
-                    bgcolor: "#eff6ff",
-                    color: "#2563eb",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {item.icon}
-                </Box>
-
-                <Box>
-                  <Typography sx={{ fontSize: 28, fontWeight: 950, lineHeight: 1 }}>
-                    {item.value}
-                  </Typography>
-                  <Typography sx={{ color: "#64748b", fontWeight: 800, mt: 0.5 }}>
-                    {item.label}
-                  </Typography>
-                </Box>
-              </Stack>
-            </CardContent>
-          </Card>
-        </Grid>
-      ))}
-    </Grid>
-  );
-}
-
-function ProcedureToolbar({ search, setSearch, filter, setFilter }) {
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        borderRadius: 4,
-        border: "1px solid #e2e8f0",
-        bgcolor: "#ffffff",
-      }}
-    >
-      <CardContent sx={{ p: 2.2 }}>
-        <Stack spacing={2}>
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="Cerca procedura..."
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ color: "#94a3b8" }} />
-                </InputAdornment>
-              ),
-            }}
-            sx={{
-              maxWidth: 620,
-              "& .MuiOutlinedInput-root": {
-                borderRadius: 3,
-                bgcolor: "#f8fafc",
-                fontWeight: 700,
-              },
-            }}
-          />
-
-          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-            {FILTERS.map((item) => (
-              <Chip
-                key={item.value}
-                label={item.label}
-                clickable
-                color={filter === item.value ? "primary" : "default"}
-                variant={filter === item.value ? "filled" : "outlined"}
-                onClick={() => setFilter(item.value)}
-                sx={{
-                  borderRadius: 2,
-                  fontWeight: 900,
-                  px: 0.5,
-                }}
-              />
-            ))}
-          </Stack>
-        </Stack>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ProcedureStatusBadge({ active, draft }) {
-  if (active) {
-    return (
-      <Chip
-        icon={<CheckCircleIcon />}
-        label="Attiva"
-        color="success"
-        variant="outlined"
-        size="small"
-        sx={{ fontWeight: 900 }}
-      />
-    );
-  }
-
-  if (draft) {
-    return (
-      <Chip
-        icon={<EditNoteIcon />}
-        label="Bozza"
-        color="warning"
-        variant="outlined"
-        size="small"
-        sx={{ fontWeight: 900 }}
-      />
-    );
-  }
-
-  return (
-    <Chip
-      label="Storica"
-      color="default"
-      variant="outlined"
-      size="small"
-      sx={{ fontWeight: 900 }}
-    />
-  );
-}
-
-function ProcedureCardMenu() {
-  const [anchorEl, setAnchorEl] = useState(null);
-  const open = Boolean(anchorEl);
-
-  return (
-    <>
-      <Tooltip title="Altre azioni">
-        <IconButton
-          size="small"
-          onClick={(event) => {
-            event.stopPropagation();
-            setAnchorEl(event.currentTarget);
-          }}
-        >
-          <MoreVertIcon />
-        </IconButton>
-      </Tooltip>
-
-      <Menu
-        anchorEl={anchorEl}
-        open={open}
-        onClose={() => setAnchorEl(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        transformOrigin={{ vertical: "top", horizontal: "right" }}
-      >
-        <MenuItem onClick={() => setAnchorEl(null)}>Apri dettaglio</MenuItem>
-        <MenuItem onClick={() => setAnchorEl(null)}>Crea nuova versione</MenuItem>
-        <MenuItem onClick={() => setAnchorEl(null)}>Verifica procedura</MenuItem>
-      </Menu>
-    </>
-  );
-}
-
-function ProcedureCard({ procedure, versionsByCode }) {
-  const navigate = useNavigate();
-  const versions = getVersions(procedure, versionsByCode);
-  const active = getActiveVersion(procedure, versionsByCode);
-  const draft = getDraftVersion(procedure, versionsByCode);
-  const latestVersion = versions[0];
-  const updatedAt = latestVersion?.updated_at || latestVersion?.created_at || procedure.updated_at;
-
-  return (
-    <Card
-      elevation={0}
-      sx={{
-        height: "100%",
-        minHeight: 292,
-        borderRadius: 4,
-        border: "1px solid #e2e8f0",
-        bgcolor: "#ffffff",
-        boxShadow: "0 12px 30px rgba(15,23,42,0.05)",
-        transition: "box-shadow 180ms ease, transform 180ms ease, border-color 180ms ease",
-        "&:hover": {
-          transform: "translateY(-2px)",
-          borderColor: "#bfdbfe",
-          boxShadow: "0 18px 42px rgba(15,23,42,0.10)",
-        },
-      }}
-    >
-      <CardContent sx={{ p: 2.5, height: "100%" }}>
-        <Stack spacing={2.1} sx={{ height: "100%" }}>
-          <Stack direction="row" justifyContent="space-between" spacing={2}>
-            <Stack direction="row" spacing={1.5} alignItems="flex-start">
-              <Box
-                sx={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 3,
-                  bgcolor: "#eff6ff",
-                  color: "#2563eb",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <ArticleOutlinedIcon />
-              </Box>
-
-              <Box>
-                <Typography sx={{ fontSize: 20, fontWeight: 950, lineHeight: 1.2 }}>
-                  {operatorName(procedureCode(procedure), procedure.name)}
-                </Typography>
-
-                <Typography
-                  sx={{
-                    color: "#64748b",
-                    mt: 0.7,
-                    fontSize: 14.5,
-                    lineHeight: 1.45,
-                  }}
-                >
-                  {operatorDescription(procedure)}
-                </Typography>
-              </Box>
-            </Stack>
-
-            <ProcedureCardMenu />
-          </Stack>
-
-          <Divider />
-
-          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-            <ProcedureStatusBadge active={active} draft={draft} />
-
-            {draft && (
-              <Chip
-                icon={<EditNoteIcon />}
-                label={`Bozza ${draft.version}`}
-                color="warning"
-                variant="outlined"
-                size="small"
-                sx={{ fontWeight: 900 }}
-              />
-            )}
-          </Stack>
-
-          <Grid container spacing={1.6}>
-            <Grid item xs={6}>
-              <Typography sx={{ color: "#94a3b8", fontSize: 12, fontWeight: 900 }}>
-                Versione attiva
-              </Typography>
-              <Typography sx={{ fontWeight: 950, mt: 0.2 }}>
-                {active?.version || "-"}
-              </Typography>
-            </Grid>
-
-            <Grid item xs={6}>
-              <Typography sx={{ color: "#94a3b8", fontSize: 12, fontWeight: 900 }}>
-                Versioni
-              </Typography>
-              <Typography sx={{ fontWeight: 950, mt: 0.2 }}>{versions.length}</Typography>
-            </Grid>
-
-            <Grid item xs={6}>
-              <Typography sx={{ color: "#94a3b8", fontSize: 12, fontWeight: 900 }}>
-                Fasi
-              </Typography>
-              <Typography sx={{ fontWeight: 950, mt: 0.2 }}>
-                {latestVersion?.phase_count ?? latestVersion?.steps_count ?? latestVersion?.steps?.length ?? "-"}
-              </Typography>
-            </Grid>
-
-            <Grid item xs={6}>
-              <Typography sx={{ color: "#94a3b8", fontSize: 12, fontWeight: 900 }}>
-                Ultima modifica
-              </Typography>
-              <Typography sx={{ fontWeight: 950, mt: 0.2 }}>
-                {formatDate(updatedAt)}
-              </Typography>
-            </Grid>
-          </Grid>
-
-          <Box sx={{ flexGrow: 1 }} />
-
-          <Divider />
-
-          <Stack direction="row" spacing={1.2} justifyContent="flex-end">
-            <Button
-              variant="outlined"
-              startIcon={<PlayArrowIcon />}
-              sx={{ borderRadius: 2.4, fontWeight: 900, textTransform: "none" }}
-              onClick={() => {
-                const code = procedureCode(procedure);
-                const versionToOpen =
-                  procedure.draft_version ||
-                  procedure.active_version ||
-                  "v1.0";
-
-                navigate(`/procedures/${code}/versions/${versionToOpen}`);
-               }}
-            >
-              Apri
-            </Button>
-            <Button
-              variant="contained"
-              sx={{ borderRadius: 2.4, fontWeight: 900, textTransform: "none" }}
-              onClick={() =>
-                navigate(`/procedures/${procedureCode(procedure)}/versions`)
-              }
-            >
-              Versioni
-            </Button>          
-          </Stack>
-        </Stack>
-      </CardContent>
-    </Card>
-  );
-}
-
-function LoadingState() {
-  return (
-    <Card elevation={0} sx={{ borderRadius: 4, border: "1px solid #e2e8f0" }}>
-      <CardContent sx={{ p: 5, textAlign: "center" }}>
-        <CircularProgress />
-        <Typography sx={{ mt: 2, color: "#64748b", fontWeight: 800 }}>
-          Caricamento procedure automatiche...
-        </Typography>
-      </CardContent>
-    </Card>
-  );
-}
-
-function EmptyState() {
-  return (
-    <Card elevation={0} sx={{ borderRadius: 4, border: "1px solid #e2e8f0" }}>
-      <CardContent sx={{ p: 5, textAlign: "center" }}>
-        <ArticleOutlinedIcon sx={{ fontSize: 48, color: "#94a3b8" }} />
-        <Typography sx={{ mt: 1.5, fontSize: 20, fontWeight: 950 }}>
-          Nessuna procedura trovata
-        </Typography>
-        <Typography sx={{ mt: 0.5, color: "#64748b" }}>
-          Modifica la ricerca oppure crea una nuova procedura automatica.
-        </Typography>
-      </CardContent>
-    </Card>
-  );
-}
-
-export default function ProcedureConsole() {
-  const [procedures, setProcedures] = useState([]);
-  const [versionsByCode, setVersionsByCode] = useState({});
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("ALL");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  async function loadProcedures() {
-    setLoading(true);
-
+  const load = useCallback(async () => {
+    setLoading(true)
     try {
-      const data = await listProcedures();
-      const items = data.items || [];
-
-      setProcedures(items);
-
-      const versions = {};
-
-      await Promise.all(
+      const response = await listProcedures()
+      const items = Array.isArray(response) ? response : response?.items || []
+      const versionEntries = await Promise.all(
         items.map(async (procedure) => {
-          const versionData = await listVersions(procedureCode(procedure));
-          versions[procedureCode(procedure)] = versionData.items || [];
+          const code = procedure?.code || procedure?.definition_code || procedure?.procedure_code
+          if (!code) return ['', []]
+          try {
+            const versionResponse = await listVersions(code)
+            return [code, Array.isArray(versionResponse) ? versionResponse : versionResponse?.items || []]
+          } catch {
+            return [code, []]
+          }
         }),
-      );
-
-      setVersionsByCode(versions);
-      setError(null);
-    } catch (err) {
-      setError(err.message || "Errore caricamento procedure");
+      )
+      setProcedures(items)
+      setVersionsByCode(Object.fromEntries(versionEntries.filter(([code]) => code)))
+      setError('')
+    } catch (loadError) {
+      setError(loadError?.message || 'Errore caricamento procedure automatiche.')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }
+  }, [])
 
-  useEffect(() => {
-    loadProcedures();
-  }, []);
+  useEffect(() => { load() }, [load])
+
+  const resetFilters = () => {
+    setSearch('')
+    setStatus('ALL')
+    setCategory('ALL')
+    setTrigger('ALL')
+  }
 
   const filteredProcedures = useMemo(() => {
-    const value = search.toLowerCase().trim();
-
+    const normalizedSearch = search.trim().toLowerCase()
     return procedures.filter((procedure) => {
-      const active = getActiveVersion(procedure, versionsByCode);
-      const draft = getDraftVersion(procedure, versionsByCode);
-      const deprecated = getDeprecatedVersions(procedure, versionsByCode);
+      const metadata = catalogMetadata(procedure, versionsByCode)
+      if (status === 'ACTIVE' && metadata.lifecycle.status !== 'ACTIVE') return false
+      if (status === 'DRAFT' && !metadata.lifecycle.draft) return false
+      if (status === 'HISTORICAL' && metadata.historicalCount === 0 && metadata.lifecycle.status !== 'DEPRECATED') return false
+      if (category !== 'ALL' && metadata.category !== category) return false
+      if (trigger !== 'ALL' && metadata.trigger !== trigger) return false
+      if (!normalizedSearch) return true
+      return [metadata.name, metadata.code, metadata.description, metadata.owner]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(normalizedSearch))
+    })
+  }, [procedures, versionsByCode, search, status, category, trigger])
 
-      if (filter === "PUBLISHED" && !active) return false;
-      if (filter === "DRAFT" && !draft) return false;
-      if (filter === "DEPRECATED" && deprecated.length === 0) return false;
+  const summary = useMemo(() => {
+    const metadata = procedures.map((procedure) => catalogMetadata(procedure, versionsByCode))
+    return {
+      total: metadata.length,
+      active: metadata.filter((item) => item.lifecycle.status === 'ACTIVE').length,
+      draft: metadata.filter((item) => Boolean(item.lifecycle.draft)).length,
+      historical: metadata.filter((item) => item.historicalCount > 0 || item.lifecycle.status === 'DEPRECATED').length,
+    }
+  }, [procedures, versionsByCode])
 
-      if (!value) return true;
+  const handleOpenVersions = (procedure) => {
+    const code = procedure?.code || procedure?.definition_code || procedure?.procedure_code
+    if (code) navigate(`/procedures/${code}/versions`)
+  }
 
-      const name = operatorName(
-        procedureCode(procedure),
-        procedure.name,
-      ).toLowerCase();
-
-      const description = operatorDescription(procedure).toLowerCase();
-
-      return (
-        name.includes(value)
-        || description.includes(value)
-        || procedureCode(procedure).toLowerCase().includes(value)
-      );
-    });
-  }, [procedures, versionsByCode, search, filter]);
+  const handleOpenDetail = (procedure, version) => {
+    const code = procedure?.code || procedure?.definition_code || procedure?.procedure_code
+    if (!code) return
+    navigate(version ? `/procedures/${code}/versions/${version}` : `/procedures/${code}`)
+  }
 
   return (
     <AppLayout>
-      <Box
-        sx={{
-          width: "100%",
-          maxWidth: 1700,
-          mx: "auto",
-          px: { xs: 0, md: 1 },
-        }}
-      >
-        <Stack spacing={2.5}>
-          <ProcedureHeader />
+      <WorkspacePage spacing={2.4}>
+        <WorkspaceSection
+          eyebrow="Automation"
+          title="Procedure Automatiche"
+          description="Catalogo enterprise dei modelli procedurali, delle versioni e del relativo ciclo di vita."
+          action={
+            <Button startIcon={<RefreshIcon />} onClick={load} disabled={loading} sx={{ textTransform: 'none', fontWeight: 900 }}>
+              Aggiorna
+            </Button>
+          }
+        >
+          <KpiGrid>
+            <KpiCard label="Procedure totali" value={summary.total} helper="Modelli nel catalogo" icon={AccountTreeIcon} actionLabel="Mostra tutte" onClick={resetFilters} />
+            <KpiCard label="Attive" value={summary.active} helper="Versione pubblicata" icon={CheckCircleIcon} tone="success" actionLabel="Filtra attive" onClick={() => setStatus('ACTIVE')} />
+            <KpiCard label="Con bozza" value={summary.draft} helper="Modifiche in lavorazione" icon={EditNoteIcon} tone="warning" actionLabel="Filtra bozze" onClick={() => setStatus('DRAFT')} />
+            <KpiCard label="Storiche" value={summary.historical} helper="Versioni deprecate" icon={HistoryIcon} tone="cyan" actionLabel="Filtra storiche" onClick={() => setStatus('HISTORICAL')} />
+          </KpiGrid>
+        </WorkspaceSection>
 
-          <ProcedureStats procedures={procedures} versionsByCode={versionsByCode} />
-
-          <ProcedureToolbar
+        <WorkspaceSection
+          eyebrow="Catalogo"
+          title="Modelli procedurali"
+          description="Ricerca, filtra e apri il Drawer360 senza abbandonare il contesto operativo."
+        >
+          <ProcedureCatalogToolbar
             search={search}
-            setSearch={setSearch}
-            filter={filter}
-            setFilter={setFilter}
+            onSearchChange={setSearch}
+            status={status}
+            onStatusChange={setStatus}
+            category={category}
+            onCategoryChange={setCategory}
+            trigger={trigger}
+            onTriggerChange={setTrigger}
+            resultCount={filteredProcedures.length}
+            totalCount={procedures.length}
+            onReset={resetFilters}
+            onCreate={() => setNotice({ open: true, message: 'La creazione guidata sarà collegata nel Procedure Designer.' })}
           />
+        </WorkspaceSection>
 
-          {loading && <LoadingState />}
+        {loading && <ProcedureCatalogLoading />}
+        {!loading && error && <ProcedureCatalogError message={error} onRetry={load} />}
+        {!loading && !error && procedures.length === 0 && <ProcedureCatalogEmpty />}
+        {!loading && !error && procedures.length > 0 && filteredProcedures.length === 0 && <ProcedureCatalogEmpty filtered onReset={resetFilters} />}
+        {!loading && !error && filteredProcedures.length > 0 && (
+          <ProcedureCatalogTable
+            procedures={filteredProcedures}
+            versionsByCode={versionsByCode}
+            selectedCode={selectedProcedure?.code || selectedProcedure?.definition_code || selectedProcedure?.procedure_code}
+            onSelect={setSelectedProcedure}
+            onOpenVersions={handleOpenVersions}
+          />
+        )}
 
-          {!loading && error && (
-            <Alert severity="error" sx={{ borderRadius: 3, fontWeight: 800 }}>
-              {error}
-            </Alert>
-          )}
+        <ProcedureDrawer360
+          open={Boolean(selectedProcedure)}
+          procedure={selectedProcedure}
+          versionsByCode={versionsByCode}
+          onClose={() => setSelectedProcedure(null)}
+          onOpenDetail={handleOpenDetail}
+          onOpenVersions={handleOpenVersions}
+        />
 
-          {!loading && !error && filteredProcedures.length === 0 && <EmptyState />}
-
-          {!loading && !error && filteredProcedures.length > 0 && (
-            <Grid container spacing={2.5} alignItems="stretch">
-              {filteredProcedures.map((procedure) => (
-                <Grid key={procedureCode(procedure)} item xs={12} xl={6}>
-                  <ProcedureCard
-                    procedure={procedure}
-                    versionsByCode={versionsByCode}
-                  />
-                </Grid>
-              ))}
-            </Grid>
-          )}
-        </Stack>
-      </Box>
+        <Snackbar open={notice.open} autoHideDuration={3600} onClose={() => setNotice((current) => ({ ...current, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+          <Alert severity="info" variant="filled" onClose={() => setNotice((current) => ({ ...current, open: false }))} sx={{ fontWeight: 800 }}>
+            {notice.message}
+          </Alert>
+        </Snackbar>
+      </WorkspacePage>
     </AppLayout>
-  );
+  )
 }

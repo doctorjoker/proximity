@@ -8,6 +8,7 @@ import CustomerWorkspace from "../components/customers/CustomerWorkspace";
 import CustomerCreateDialog from "../components/customers/CustomerCreateDialog";
 import Customer360Drawer from "../components/customers/Customer360Drawer";
 import SurfaceCard from "../components/ui/SurfaceCard";
+import WorkspaceTemplate from "../components/ui/WorkspaceTemplate";
 
 const API_BASE = "";
 
@@ -139,7 +140,7 @@ export default function Customers() {
   };
 
   return (
-    <Box sx={{ color: "#0f172a" }}>
+    <WorkspaceTemplate sx={{ color: "#0f172a" }}>
       <CustomerHeader onCreate={() => setNewCustomerOpen(true)} />
       <CustomerMetrics summary={summary} onFilter={setStatusFilter} />
       <CustomerToolbar
@@ -183,6 +184,6 @@ export default function Customers() {
         }}
         onOpenRouter={openRouterAccess}
       />
-    </Box>
+    </WorkspaceTemplate>
   );
 }

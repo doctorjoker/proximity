@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import AppLayout from "../../components/layout/AppLayout";
+import ProcedureDesigner from "./ProcedureDesigner";
 import {
   Alert,
   Box,
@@ -702,6 +703,13 @@ export default function ProcedureVersionDetails() {
     <VariablesTab key="variables" items={variablesData} onCreateVariable={handleCreateVariable} onEditVariable={handleEditVariable} onDeleteVariable={handleDeleteVariable} />,
     <TestTab key="test" procedure={procedure} version={version} phases={phasesData} />,
     <AuditTab key="audit" />,
+    <ProcedureDesigner
+      key="designer"
+      procedure={procedure}
+      version={version}
+      phases={phasesData}
+      variables={variablesData}
+    />,
   ];
 
   return (
@@ -748,7 +756,7 @@ export default function ProcedureVersionDetails() {
           )}
 
           <Grid container spacing={3}>
-            <Grid item xs={12} lg={8.7}>
+            <Grid item xs={12} lg={tab === 5 ? 12 : 8.7}>
               <Paper variant="outlined" sx={{ borderRadius: 4, overflow: "hidden" }}>
                 <Box sx={{ px: 2 }}>
                   <Tabs value={tab} onChange={(_, value) => setTab(value)} variant="scrollable" scrollButtons="auto">
@@ -757,10 +765,11 @@ export default function ProcedureVersionDetails() {
                     <Tab label="Variabili" />
                     <Tab label="Test" />
                     <Tab label="Audit" />
+                    <Tab label="Designer" />
                   </Tabs>
                 </Box>
                 <Divider />
-                <Box sx={{ p: { xs: 2, md: 2.5 } }}>
+                <Box sx={{ p: tab === 5 ? { xs: 1, md: 1.5 } : { xs: 2, md: 2.5 } }}>
                   {loading ? (
                     <Stack alignItems="center" spacing={2} sx={{ py: 6 }}>
                       <CircularProgress />
@@ -770,9 +779,15 @@ export default function ProcedureVersionDetails() {
                 </Box>
               </Paper>
             </Grid>
-            <Grid item xs={12} lg={3.3}>
-              <SidebarSummary version={version} phasesCount={phasesData.length} variableCount={variablesData.length} />
-            </Grid>
+            {tab !== 5 && (
+              <Grid item xs={12} lg={3.3}>
+                <SidebarSummary
+                  version={version}
+                  phasesCount={phasesData.length}
+                  variableCount={variablesData.length}
+                />
+              </Grid>
+            )}
           </Grid>
         </Stack>
 

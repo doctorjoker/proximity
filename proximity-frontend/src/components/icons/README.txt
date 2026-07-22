@@ -1,0 +1,1 @@
+Reuse the icons package from EUREKA 12.0.1.3 (ProcedureIcon, ProximityIconWrapper, procedureIconRegistry).

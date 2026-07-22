@@ -109,12 +109,13 @@ export default function ExecutionDrawer({ open, execution, onClose }) {
       anchor="right"
       open={open}
       onClose={onClose}
-      PaperProps={{ sx: { width: { xs: "100%", md: 780, xl: 860 } } }}
+      PaperProps={{ sx: { width: { xs: "100%", md: 590, xl: 640 }, maxWidth: "100vw", bgcolor: "#f6f8fb", borderLeft: "1px solid #dbe5f0", boxShadow: "-18px 0 48px rgba(15, 23, 42, 0.14)" } }}
     >
       <Stack sx={{ height: "100%" }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ p: 2.5 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ p: 2.25, bgcolor: "#ffffff" }}>
           <Stack spacing={0.8} sx={{ minWidth: 0 }}>
             <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+              <Typography variant="overline" sx={{ color: "#2563eb", fontWeight: 950, letterSpacing: 0.9 }}>Execution Center</Typography>
               <Typography variant="h5" fontWeight={950}>Dettaglio esecuzione</Typography>
               <ExecutionStatusChip status={status} />
             </Stack>
@@ -135,7 +136,7 @@ export default function ExecutionDrawer({ open, execution, onClose }) {
         </Stack>
         <Divider />
 
-        <Box sx={{ px: 2 }}>
+        <Box sx={{ px: 2, bgcolor: "#ffffff" }}>
           <Tabs value={tab} onChange={(_, value) => setTab(value)} variant="scrollable" scrollButtons="auto">
             <Tab label="Overview" />
             <Tab label={`Timeline (${timeline.length})`} />
@@ -146,7 +147,7 @@ export default function ExecutionDrawer({ open, execution, onClose }) {
         </Box>
         <Divider />
 
-        <Box sx={{ p: 2.5, overflow: "auto", flex: 1 }}>
+        <Box sx={{ p: 2.25, overflow: "auto", flex: 1 }}>
           {loading ? (
             <Stack alignItems="center" spacing={2} sx={{ py: 8 }}>
               <CircularProgress />

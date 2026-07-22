@@ -205,6 +205,162 @@ def get_version_detail(code: str, version: str):
     }
 
 
+def get_designer(code: str, version: str):
+    version_item = get_version(code, version)
+    if not version_item:
+        return None
+
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT *
+                FROM procedure_phases
+                WHERE version_id = %s
+                ORDER BY phase_order ASC
+            """, (version_item["id"],))
+            phases = cur.fetchall()
+
+            cur.execute("""
+                SELECT *
+                FROM procedure_phase_transitions
+                WHERE version_id = %s
+                ORDER BY sort_order ASC, id ASC
+            """, (version_item["id"],))
+            transitions = cur.fetchall()
+
+            cur.execute("""
+                SELECT *
+                FROM procedure_variables
+                WHERE version_id = %s
+                ORDER BY scope ASC, name ASC
+            """, (version_item["id"],))
+            variables = cur.fetchall()
+
+    nodes = []
+    for phase in phases:
+        phase_data = dict(phase)
+        nodes.append({
+            "id": str(phase_data["id"]),
+            "position": {
+                "x": float(phase_data.get("position_x") or 120),
+                "y": float(phase_data.get("position_y") or 120),
+            },
+            "data": phase_data,
+        })
+
+    edges = []
+    for transition in transitions:
+        transition_data = dict(transition)
+        edges.append({
+            "id": str(transition_data["id"]),
+            "source": str(transition_data["source_phase_id"]),
+            "target": str(transition_data["target_phase_id"]),
+            "transition_type": transition_data["transition_type"],
+            "label": transition_data.get("label"),
+            "sort_order": transition_data.get("sort_order", 0),
+            "metadata": transition_data.get("metadata") or {},
+        })
+
+    return {
+        "version": version_item,
+        "nodes": nodes,
+        "edges": edges,
+        "variables": variables,
+    }
+
+
+def save_designer(code: str, version: str, payload):
+    version_item = get_version(code, version)
+    if not version_item:
+        return None
+
+    version_id = version_item["id"]
+    payload_data = payload.dict()
+    nodes = payload_data.get("nodes", [])
+    edges = payload_data.get("edges", [])
+
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id
+                FROM procedure_phases
+                WHERE version_id = %s
+            """, (version_id,))
+            valid_phase_ids = {row["id"] for row in cur.fetchall()}
+
+            for node in nodes:
+                try:
+                    phase_id = int(node["id"])
+                except (TypeError, ValueError):
+                    raise ValueError(f"Invalid phase id: {node.get('id')}")
+
+                if phase_id not in valid_phase_ids:
+                    raise ValueError(
+                        f"Phase {phase_id} does not belong to version {version}"
+                    )
+
+                position = node.get("position") or {}
+                cur.execute("""
+                    UPDATE procedure_phases
+                    SET
+                        position_x = %s,
+                        position_y = %s
+                    WHERE id = %s
+                      AND version_id = %s
+                """, (
+                    round(float(position.get("x", 120))),
+                    round(float(position.get("y", 120))),
+                    phase_id,
+                    version_id,
+                ))
+
+            cur.execute("""
+                DELETE FROM procedure_phase_transitions
+                WHERE version_id = %s
+            """, (version_id,))
+
+            for edge in edges:
+                try:
+                    source_phase_id = int(edge["source"])
+                    target_phase_id = int(edge["target"])
+                except (TypeError, ValueError):
+                    raise ValueError("Edge source and target must be valid phase ids")
+
+                if source_phase_id not in valid_phase_ids:
+                    raise ValueError(
+                        f"Source phase {source_phase_id} does not belong to version {version}"
+                    )
+                if target_phase_id not in valid_phase_ids:
+                    raise ValueError(
+                        f"Target phase {target_phase_id} does not belong to version {version}"
+                    )
+                if source_phase_id == target_phase_id:
+                    raise ValueError("A transition cannot point to the same phase")
+
+                cur.execute("""
+                    INSERT INTO procedure_phase_transitions (
+                        version_id,
+                        source_phase_id,
+                        target_phase_id,
+                        transition_type,
+                        label,
+                        sort_order,
+                        metadata
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
+                """, (
+                    version_id,
+                    source_phase_id,
+                    target_phase_id,
+                    edge.get("transition_type") or "SUCCESS",
+                    edge.get("label"),
+                    edge.get("sort_order", 0),
+                    psycopg2.extras.Json(edge.get("metadata") or {}),
+                ))
+
+    return get_designer(code, version)
+
+
 def create_test_execution(code: str, version: str, payload):
     version_item = get_version(code, version)
     if not version_item:
