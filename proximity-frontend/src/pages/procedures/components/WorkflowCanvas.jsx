@@ -27,6 +27,23 @@ function EnterpriseNode({ id, data, selected }) {
   const NodeIcon = data.icon
   const color = data.color || '#2563EB'
   const properties = data.properties || {}
+  const simulationState = data.simulationState || null
+  const simulationActive = simulationState === 'active'
+  const simulationCompleted = simulationState === 'completed'
+  const nodeBorderColor = simulationActive
+    ? '#2563EB'
+    : simulationCompleted
+      ? '#16A34A'
+      : selected
+        ? color
+        : '#CBD5E1'
+  const nodeShadow = simulationActive
+    ? '0 0 0 7px rgba(37, 99, 235, 0.20), 0 0 26px rgba(37, 99, 235, 0.72), 0 18px 42px rgba(37, 99, 235, 0.40)'
+    : simulationCompleted
+      ? '0 0 0 4px rgba(22, 163, 74, 0.14), 0 10px 26px rgba(22, 163, 74, 0.22)'
+      : selected
+        ? `0 12px 30px ${color}2E`
+        : '0 8px 20px rgba(15, 23, 42, 0.10)'
 
   return (
     <Box
@@ -34,14 +51,17 @@ function EnterpriseNode({ id, data, selected }) {
         width: NODE_WIDTH,
         bgcolor: '#FFFFFF',
         border: '2px solid',
-        borderColor: selected ? color : '#CBD5E1',
+        borderColor: nodeBorderColor,
         borderRadius: 2.5,
-        boxShadow: selected
-          ? `0 12px 30px ${color}2E`
-          : '0 8px 20px rgba(15, 23, 42, 0.10)',
+        boxShadow: nodeShadow,
         overflow: 'visible',
         userSelect: 'none',
-        transition: 'border-color 120ms ease, box-shadow 120ms ease',
+        transition: 'border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease, filter 180ms ease',
+        animation: simulationActive ? 'proximitySimulationPulse 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite' : 'none',
+        '@keyframes proximitySimulationPulse': {
+          '0%, 100%': { transform: 'scale(1)' },
+          '50%': { transform: 'scale(1.04)', filter: 'brightness(1.08) saturate(1.08)' },
+        },
       }}
     >
       <Handle
@@ -124,6 +144,14 @@ function EnterpriseNode({ id, data, selected }) {
       </Box>
 
       <Stack spacing={0.75} sx={{ px: 1.35, py: 1.15 }}>
+        {simulationActive || simulationCompleted ? (
+          <Chip
+            size="small"
+            color={simulationActive ? 'primary' : 'success'}
+            label={simulationActive ? 'SIMULAZIONE IN CORSO' : 'COMPLETATA'}
+            sx={{ alignSelf: 'flex-start', height: 21, fontSize: 10, fontWeight: 900 }}
+          />
+        ) : null}
         <Typography
           variant="caption"
           sx={{

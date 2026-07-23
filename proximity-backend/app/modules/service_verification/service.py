@@ -2,30 +2,11 @@ from app.modules.device_authority.service import assert_device_authorized
 from app.modules.desired_config.repository import list_desired_configs
 from app.services.genieacs import genieacs_client
 
-
-def _get_value(obj, path, default=None):
-    current = obj
-
-    try:
-        for key in path:
-            current = current[key]
-
-        if isinstance(current, dict) and "_value" in current:
-            return current["_value"]
-
-        return current
-
-    except Exception:
-        return default
+from .registry import VERIFY_HANDLERS
 
 
-def _desired_by_type(configs):
-    result = {}
-
-    for cfg in configs:
-        result[cfg["config_type"]] = cfg["configuration"]
-
-    return result
+def _is_enabled(config: dict) -> bool:
+    return config.get("enabled", True) is not False
 
 
 async def verify_customer_service(
@@ -46,241 +27,72 @@ async def verify_customer_service(
             "reason": auth["reason"],
         }
 
-    configs = list_desired_configs(service_code)
-    desired = _desired_by_type(configs)
+    configs = [
+        config
+        for config in list_desired_configs(service_code)
+        if _is_enabled(config)
+    ]
+
+    if not configs:
+        return {
+            "success": True,
+            "service_code": service_code,
+            "acs_device_id": acs_device_id,
+            "state": "NO_CONFIGURATION",
+            "verification": {},
+            "summary": {
+                "required": 0,
+                "verified": 0,
+                "operational": 0,
+                "failed": 0,
+                "unsupported": 0,
+            },
+        }
 
     device = await genieacs_client.get_device_raw(acs_device_id)
 
-    verification = {
-        "pppoe": {
-            "configured": False,
-            "connected": False,
-        },
-        "wifi": {
-            "configured": False,
-        },
-        "voip": {
-            "configured": False,
-            "registered": False,
-        },
-    }
+    verification = {}
+    required_types = []
+    unsupported_types = []
+    operational_types = []
+    failed_types = []
 
-    # PPPoE
-    if "PPPOE" in desired:
-        expected_username = desired["PPPOE"].get("username")
+    for config in configs:
+        config_type = str(config["config_type"]).upper()
+        configuration = config.get("configuration") or {}
+        required_types.append(config_type)
 
-        actual_username = _get_value(
-            device,
-            [
-                "InternetGatewayDevice",
-                "WANDevice",
-                "1",
-                "WANConnectionDevice",
-                "4",
-                "WANPPPConnection",
-                "1",
-                "Username",
-            ],
-        )
+        verifier = VERIFY_HANDLERS.get(config_type)
 
-        connection_status = _get_value(
-            device,
-            [
-                "InternetGatewayDevice",
-                "WANDevice",
-                "1",
-                "WANConnectionDevice",
-                "4",
-                "WANPPPConnection",
-                "1",
-                "ConnectionStatus",
-            ],
-        )
+        if verifier is None:
+            unsupported_types.append(config_type)
+            verification[config_type.lower()] = {
+                "configured": False,
+                "operational": False,
+                "supported": False,
+                "reason": "VERIFIER_NOT_REGISTERED",
+            }
+            continue
 
-        external_ip = _get_value(
-            device,
-            [
-                "InternetGatewayDevice",
-                "WANDevice",
-                "1",
-                "WANConnectionDevice",
-                "4",
-                "WANPPPConnection",
-                "1",
-                "ExternalIPAddress",
-            ],
-        )
+        result = await verifier(device, configuration)
+        result.setdefault("supported", True)
+        result.setdefault("operational", bool(result.get("configured")))
 
-        verification["pppoe"] = {
-            "configured": actual_username == expected_username,
-            "connected": connection_status == "Connected",
-            "expected_username": expected_username,
-            "actual_username": actual_username,
-            "connection_status": connection_status,
-            "external_ip": external_ip,
-        }
+        verification[config_type.lower()] = result
 
-    # WiFi
-    if "WIFI" in desired:
-        expected_ssid_24 = desired["WIFI"].get("ssid_24")
-        expected_ssid_5 = desired["WIFI"].get("ssid_5")
+        if result["operational"]:
+            operational_types.append(config_type)
+        else:
+            failed_types.append(config_type)
 
-        actual_ssid_24 = _get_value(
-            device,
-            [
-                "InternetGatewayDevice",
-                "LANDevice",
-                "1",
-                "WLANConfiguration",
-                "1",
-                "SSID",
-            ],
-        )
-
-        actual_ssid_5 = _get_value(
-            device,
-            [
-                "InternetGatewayDevice",
-                "LANDevice",
-                "1",
-                "WLANConfiguration",
-                "3",
-                "SSID",
-            ],
-        )
-
-        wifi24_enabled = _get_value(
-            device,
-            [
-                "InternetGatewayDevice",
-                "LANDevice",
-                "1",
-                "WLANConfiguration",
-                "1",
-                "Enable",
-            ],
-        )
-
-        wifi5_enabled = _get_value(
-            device,
-            [
-                "InternetGatewayDevice",
-                "LANDevice",
-                "1",
-                "WLANConfiguration",
-                "3",
-                "Enable",
-            ],
-        )
-
-        verification["wifi"] = {
-            "configured": (
-                actual_ssid_24 == expected_ssid_24
-                and actual_ssid_5 == expected_ssid_5
-            ),
-            "ssid24": actual_ssid_24,
-            "ssid5": actual_ssid_5,
-            "expected_ssid24": expected_ssid_24,
-            "expected_ssid5": expected_ssid_5,
-            "wifi24_enabled": wifi24_enabled,
-            "wifi5_enabled": wifi5_enabled,
-        }
-
-    # VoIP
-    if "VOIP" in desired:
-        expected_number = desired["VOIP"].get("number")
-        expected_username = desired["VOIP"].get("username")
-        expected_registrar = desired["VOIP"].get("registrar")
-
-        actual_number = _get_value(
-            device,
-            [
-                "Device",
-                "X_TP_Services",
-                "X_TP_VoiceService",
-                "1",
-                "VoiceProfile",
-                "1",
-                "MultiIsp",
-                "1",
-                "MultiVoipNum",
-            ],
-        )
-
-        actual_username = _get_value(
-            device,
-            [
-                "Device",
-                "X_TP_Services",
-                "X_TP_VoiceService",
-                "1",
-                "VoiceProfile",
-                "1",
-                "MultiIsp",
-                "1",
-                "MultiAuthUserName",
-            ],
-        )
-
-        actual_registrar = _get_value(
-            device,
-            [
-                "Device",
-                "X_TP_Services",
-                "X_TP_VoiceService",
-                "1",
-                "VoiceProfile",
-                "1",
-                "MultiIsp",
-                "1",
-                "MultiRegistrarServer",
-            ],
-        )
-
-        account_enabled = _get_value(
-            device,
-            [
-                "Device",
-                "X_TP_Services",
-                "X_TP_VoiceService",
-                "1",
-                "VoiceProfile",
-                "1",
-                "MultiIsp",
-                "1",
-                "MultiAccountEnable",
-            ],
-        )
-
-        verification["voip"] = {
-            "configured": (
-                actual_number == expected_number
-                and actual_username == expected_username
-                and actual_registrar == expected_registrar
-                and account_enabled == 1
-            ),
-            # Nota: su XC220-G3v MultiStatus/Line.Status non sono affidabili.
-            # Per ora "registered" viene derivato dalla presenza config runtime.
-            # In futuro va collegato a FreePBX/Asterisk o a un parametro runtime più affidabile.
-            "registered": (
-                actual_number == expected_number
-                and actual_username == expected_username
-                and actual_registrar == expected_registrar
-                and account_enabled == 1
-            ),
-            "number": actual_number,
-            "username": actual_username,
-            "registrar": actual_registrar,
-            "account_enabled": account_enabled,
-        }
-
-    all_configured = (
-        verification["pppoe"]["configured"]
-        and verification["wifi"]["configured"]
-        and verification["voip"]["configured"]
+    all_operational = (
+        bool(required_types)
+        and not unsupported_types
+        and not failed_types
+        and len(operational_types) == len(required_types)
     )
 
-    state = "SERVICE_OPERATIONAL" if all_configured else "SERVICE_DEGRADED"
+    state = "SERVICE_OPERATIONAL" if all_operational else "SERVICE_DEGRADED"
 
     return {
         "success": True,
@@ -288,4 +100,15 @@ async def verify_customer_service(
         "acs_device_id": acs_device_id,
         "state": state,
         "verification": verification,
+        "summary": {
+            "required": len(required_types),
+            "verified": len(operational_types) + len(failed_types),
+            "operational": len(operational_types),
+            "failed": len(failed_types),
+            "unsupported": len(unsupported_types),
+            "required_types": required_types,
+            "operational_types": operational_types,
+            "failed_types": failed_types,
+            "unsupported_types": unsupported_types,
+        },
     }

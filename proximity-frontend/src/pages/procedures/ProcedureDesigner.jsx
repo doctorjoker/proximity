@@ -9,6 +9,7 @@ import WorkspaceTemplate from '../../components/ui/WorkspaceTemplate'
 import PropertiesPanel from './components/PropertiesPanel'
 import StepExplorer from './components/StepExplorer'
 import WorkflowCanvas from './components/WorkflowCanvas'
+import SimulationPanel from './components/SimulationPanel'
 
 const CATEGORY_STYLES = {
   provisioning: { color: '#2563EB', label: 'Provisioning' },
@@ -545,6 +546,25 @@ const serializeDesigner = (nodes, edges) => {
   }
 }
 
+
+const SIMULATION_STEP_DELAY_MS = 1100
+
+const findSimulationStartNode = (nodes, edges) => {
+  if (!nodes.length) return null
+  const targets = new Set(edges.map((edge) => String(edge.target)))
+  return nodes.find((node) => !targets.has(String(node.id))) || nodes[0]
+}
+
+const selectSimulationEdge = (edges, sourceNodeId) => {
+  const outgoing = edges
+    .filter((edge) => String(edge.source) === String(sourceNodeId))
+    .sort((left, right) => Number(left.data?.sort_order || 0) - Number(right.data?.sort_order || 0))
+
+  if (!outgoing.length) return null
+
+  return outgoing.find((edge) => getTransitionType(edge) === 'SUCCESS') || outgoing[0]
+}
+
 export default function ProcedureDesigner({
   procedure,
   version,
@@ -584,12 +604,20 @@ export default function ProcedureDesigner({
   const [designerError, setDesignerError] = useState('')
   const [saveRevision, setSaveRevision] = useState(0)
   const [authoringState, setAuthoringState] = useState('idle')
+  const [simulationSpeed, setSimulationSpeed] = useState(1)
+  const [simulation, setSimulation] = useState({
+    status: 'idle',
+    currentNodeId: null,
+    currentEdgeId: null,
+    history: [],
+  })
 
   const loadedRef = useRef(false)
   const dirtyRef = useRef(false)
   const saveTimerRef = useRef(null)
   const loadAbortRef = useRef(null)
   const saveAbortRef = useRef(null)
+  const simulationTimerRef = useRef(null)
 
   const markDirty = useCallback(() => {
     if (!loadedRef.current) return
@@ -716,9 +744,219 @@ export default function ProcedureDesigner({
 
   useEffect(() => () => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    if (simulationTimerRef.current) clearTimeout(simulationTimerRef.current)
     if (loadAbortRef.current) loadAbortRef.current.abort()
     if (saveAbortRef.current) saveAbortRef.current.abort()
   }, [])
+
+  const handleResetSimulation = useCallback(() => {
+    if (simulationTimerRef.current) clearTimeout(simulationTimerRef.current)
+    setSimulation({
+      status: 'idle',
+      currentNodeId: null,
+      currentEdgeId: null,
+      history: [],
+      traversedEdgeIds: [],
+      totalNodes: nodes.length,
+    })
+  }, [])
+
+  const handleStartSimulation = useCallback(() => {
+    const startNode = findSimulationStartNode(nodes, edges)
+    if (!startNode) {
+      setDesignerError('Simulazione non disponibile: la procedura non contiene fasi.')
+      return
+    }
+
+    setSelectedNodeId(null)
+    setSelectedEdgeId(null)
+    setDesignerError('')
+    setSimulation({
+      status: 'running',
+      currentNodeId: startNode.id,
+      currentEdgeId: null,
+      history: [{
+        nodeId: startNode.id,
+        label: startNode.label,
+        completed: false,
+        transitionType: null,
+      }],
+      traversedEdgeIds: [],
+      totalNodes: nodes.length,
+    })
+  }, [edges, nodes])
+
+  const handleNextSimulation = useCallback(() => {
+    setSimulation((current) => {
+      if (current.status !== 'running' || !current.currentNodeId) return current
+
+      const edge = selectSimulationEdge(edges, current.currentNodeId)
+      if (!edge) {
+        return {
+          ...current,
+          status: 'completed',
+          currentNodeId: current.currentNodeId,
+          currentEdgeId: null,
+          traversedEdgeIds: current.traversedEdgeIds || [],
+          totalNodes: current.totalNodes || nodes.length,
+          history: current.history.map((item, index) =>
+            index === current.history.length - 1 ? { ...item, completed: true } : item,
+          ),
+        }
+      }
+
+      const targetNode = nodes.find((node) => String(node.id) === String(edge.target))
+      if (!targetNode) {
+        return { ...current, status: 'error', currentEdgeId: String(edge.id) }
+      }
+
+      const completedHistory = current.history.map((item, index) =>
+        index === current.history.length - 1
+          ? { ...item, completed: true, transitionType: getTransitionType(edge) }
+          : item,
+      )
+
+      return {
+        status: 'running',
+        currentNodeId: targetNode.id,
+        currentEdgeId: String(edge.id),
+        traversedEdgeIds: [
+          ...(current.traversedEdgeIds || []),
+          String(edge.id),
+        ].filter((edgeId, index, collection) => collection.indexOf(edgeId) === index),
+        totalNodes: current.totalNodes || nodes.length,
+        history: [
+          ...completedHistory,
+          {
+            nodeId: targetNode.id,
+            label: targetNode.label,
+            completed: false,
+            transitionType: null,
+          },
+        ],
+      }
+    })
+  }, [edges, nodes])
+
+  const handleStopSimulation = useCallback(() => {
+    if (simulationTimerRef.current) clearTimeout(simulationTimerRef.current)
+    setSimulation((current) => ({
+      ...current,
+      status: current.status === 'running' ? 'stopped' : current.status,
+      currentEdgeId: null,
+    }))
+  }, [])
+
+  useEffect(() => {
+    if (simulation.status !== 'running') return undefined
+
+    if (simulationTimerRef.current) clearTimeout(simulationTimerRef.current)
+    simulationTimerRef.current = setTimeout(() => {
+      handleNextSimulation()
+    }, Math.max(180, Math.round(SIMULATION_STEP_DELAY_MS / simulationSpeed)))
+
+    return () => {
+      if (simulationTimerRef.current) clearTimeout(simulationTimerRef.current)
+    }
+  }, [handleNextSimulation, simulation.currentNodeId, simulation.status, simulationSpeed])
+
+  const handleReplaySimulation = useCallback(() => {
+    if (simulationTimerRef.current) clearTimeout(simulationTimerRef.current)
+    const startNode = findSimulationStartNode(nodes, edges)
+    if (!startNode) return
+
+    setSimulation({
+      status: 'running',
+      currentNodeId: startNode.id,
+      currentEdgeId: null,
+      history: [{
+        nodeId: startNode.id,
+        label: startNode.label,
+        completed: false,
+        transitionType: null,
+      }],
+      traversedEdgeIds: [],
+      totalNodes: nodes.length,
+    })
+  }, [edges, nodes])
+
+  const simulationNodes = useMemo(
+    () => nodes.map((node) => {
+      const active = String(node.id) === String(simulation.currentNodeId || '')
+      const completed = simulation.history.some(
+        (item) => String(item.nodeId) === String(node.id) && item.completed,
+      )
+
+      return {
+        ...node,
+        simulationState: active ? 'active' : completed ? 'completed' : null,
+        style: active
+          ? {
+              ...(node.style || {}),
+              border: '3px solid #2563EB',
+              boxShadow: '0 0 0 5px rgba(37, 99, 235, 0.18), 0 12px 30px rgba(37, 99, 235, 0.28)',
+            }
+          : completed
+            ? {
+                ...(node.style || {}),
+                border: '2px solid #16A34A',
+              }
+            : node.style,
+      }
+    }),
+    [nodes, simulation.currentNodeId, simulation.history],
+  )
+
+  const simulationEdges = useMemo(
+    () => edges.map((edge) => {
+      const active = String(edge.id) === String(simulation.currentEdgeId || '')
+      const traversed = (simulation.traversedEdgeIds || []).some(
+        (edgeId) => String(edgeId) === String(edge.id),
+      )
+
+      if (active) {
+        return {
+          ...edge,
+          animated: true,
+          style: {
+            ...(edge.style || {}),
+            stroke: '#2563EB',
+            strokeWidth: 5,
+            strokeDasharray: '10 7',
+            filter: 'drop-shadow(0 0 6px rgba(37, 99, 235, 0.85))',
+          },
+          labelStyle: {
+            ...(edge.labelStyle || {}),
+            fill: '#1D4ED8',
+            fontWeight: 900,
+            fontSize: 13,
+          },
+        }
+      }
+
+      if (traversed) {
+        return {
+          ...edge,
+          animated: false,
+          style: {
+            ...(edge.style || {}),
+            stroke: '#16A34A',
+            strokeWidth: 4,
+            filter: 'drop-shadow(0 0 3px rgba(22, 163, 74, 0.55))',
+          },
+          labelStyle: {
+            ...(edge.labelStyle || {}),
+            fill: '#15803D',
+            fontWeight: 900,
+            fontSize: 12,
+          },
+        }
+      }
+
+      return edge
+    }),
+    [edges, simulation.currentEdgeId, simulation.traversedEdgeIds],
+  )
 
   const designerContext = useMemo(
     () => ({
@@ -1185,9 +1423,19 @@ export default function ProcedureDesigner({
       >
         <StepExplorer onSelectStep={handleExplorerSelect} />
 
+        <SimulationPanel
+          simulation={simulation}
+          speed={simulationSpeed}
+          onSpeedChange={setSimulationSpeed}
+          onStart={handleStartSimulation}
+          onNext={handleNextSimulation}
+          onStop={handleStopSimulation}
+          onReset={handleResetSimulation}
+          onReplay={handleReplaySimulation}
+        />
         <WorkflowCanvas
-          nodes={nodes}
-          edges={edges}
+          nodes={simulationNodes}
+          edges={simulationEdges}
           selectedNodeId={selectedNodeId}
           selectedEdgeId={selectedEdgeId}
           onSelectNode={handleSelectNode}

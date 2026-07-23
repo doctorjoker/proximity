@@ -6,6 +6,8 @@ import psycopg2.extras
 
 from app.core.config import settings
 
+import json
+from datetime import date, datetime
 
 DATABASE_URL = os.getenv("DATABASE_URL", settings.database_url)
 
@@ -99,7 +101,7 @@ def create_execution(
                     "workflow_type": workflow_type,
                     "mode": mode,
                     "requested_by": requested_by,
-                    "context_json": psycopg2.extras.Json(context),
+                    "context_json": psycopg2.extras.Json(_json_safe(context)),
                 },
             )
             execution = cur.fetchone()
@@ -144,7 +146,7 @@ def update_execution_scheduler_result(
                     status,
                     workflow_code,
                     workflow_type,
-                    psycopg2.extras.Json(scheduler_result),
+                    psycopg2.extras.Json(_json_safe(scheduler_result)),
                     execution_id,
                 ),
             )
@@ -222,7 +224,7 @@ def create_runtime_workflow_record(
                 "status": "QUEUED",
                 "current_step": "QUEUED",
                 "progress": 0,
-                "payload": psycopg2.extras.Json(payload),
+                "payload": psycopg2.extras.Json(_json_safe(payload)),
                 "created_by": payload.get("requested_by") or "Procedure Runtime",
             }
 
@@ -331,9 +333,9 @@ def create_execution_phase(
                     "phase_name": phase_name,
                     "phase_order": phase_order,
                     "handler_name": handler_name,
-                    "input_json": psycopg2.extras.Json(input_json or {}),
+                    "input_json": psycopg2.extras.Json(_json_safe(input_json or {})),
                     "max_attempts": max(1, int(max_attempts)),
-                    "retry_policy": psycopg2.extras.Json(retry_policy or {}),
+                    "retry_policy": psycopg2.extras.Json(_json_safe(retry_policy or {})),
                 },
             )
             return cur.fetchone()
@@ -372,12 +374,12 @@ def update_execution_phase(
                     "status": status,
                     "duration_ms": duration_ms,
                     "output_json": (
-                        psycopg2.extras.Json(output_json)
+                        psycopg2.extras.Json(_json_safe(output_json))
                         if output_json is not None
                         else None
                     ),
                     "error_json": (
-                        psycopg2.extras.Json(error_json)
+                        psycopg2.extras.Json(_json_safe(error_json))
                         if error_json is not None
                         else None
                     ),
@@ -456,7 +458,46 @@ def record_execution_phase_attempt(
                     "success": success,
                     "code": code,
                     "retry_delay_ms": retry_delay_ms,
-                    "entry": psycopg2.extras.Json([entry]),
+                    "entry": psycopg2.extras.Json(_json_safe([entry])),
                 },
             )
             return cur.fetchone()
+
+
+# ---------------------------------------------------------------------------
+# EUREKA 13.0.0b - Native graph transition loading
+# ---------------------------------------------------------------------------
+
+def list_phase_transitions(version_id: int):
+    """Return the persisted Designer graph edges for a procedure version."""
+    with get_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    id,
+                    version_id,
+                    source_phase_id,
+                    target_phase_id,
+                    transition_type,
+                    label,
+                    sort_order,
+                    metadata
+                FROM procedure_phase_transitions
+                WHERE version_id = %s
+                ORDER BY source_phase_id ASC, sort_order ASC, id ASC
+                """,
+                (version_id,),
+            )
+            return cur.fetchall()
+
+
+def _json_safe(value):
+    return json.loads(
+        json.dumps(
+            value,
+            default=lambda o: o.isoformat()
+            if isinstance(o, (datetime, date))
+            else str(o),
+        )
+    )
