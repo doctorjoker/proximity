@@ -15,6 +15,8 @@ import ProcedureEditor from "./pages/procedures/ProcedureEditor";
 import ProcedureVersionDetails from "./pages/procedures/ProcedureVersionDetails";
 import ProcedureExecutionCenter from "./pages/procedures/ProcedureExecutionCenter";
 
+import ProvisioningProfilesPage from "./pages/provisioning/ProvisioningProfilesPage";
+
 function ModulePlaceholder({ title, description }) {
   return (
     <Box sx={{ maxWidth: 1100, mx: "auto", py: 4 }}>
@@ -58,6 +60,8 @@ export default function App() {
           <Route path="procedures/:definitionCode/versions" element={<ProcedureVersions />} />
           <Route path="procedures/:definitionCode/editor" element={<ProcedureEditor />} />
           <Route path="procedures/:procedureCode/versions/:version" element={<ProcedureVersionDetails />} />
+
+          <Route path="provisioning" element={<ProvisioningProfilesPage />} />
 
           <Route path="procedure-executions" element={<ProcedureExecutionCenter />} />
           <Route path="procedures/executions" element={<Navigate to="/procedure-executions" replace />} />

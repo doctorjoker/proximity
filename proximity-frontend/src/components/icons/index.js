@@ -1,3 +1,4 @@
+export { default as ProximityActionIcon } from './ProximityActionIcon'
 export { default as ProximityIcon } from './ProximityIcon'
 export {
   PROXIMITY_ICON_DOMAINS,

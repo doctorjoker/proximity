@@ -14,6 +14,15 @@ import {
   IconUser,
   IconWifi,
   IconWorldCog,
+  IconDeviceFloppy,
+  IconPlus,
+  IconTrash,
+  IconUpload,
+  IconArrowRight,
+  IconFileDescription,
+  IconCircleCheck,
+  IconEdit,
+  IconHistory,
 } from '@tabler/icons-react'
 
 export const PROXIMITY_ICON_DOMAINS = Object.freeze({
@@ -141,6 +150,24 @@ export const PROXIMITY_ICON_REGISTRY = Object.freeze({
     border: 'rgba(100, 116, 139, 0.18)',
   },
 })
+
+
+export const PROXIMITY_ACTION_ICONS = Object.freeze({
+  ADD: IconPlus,
+  PUBLISH: IconUpload,
+  SAVE: IconDeviceFloppy,
+  DELETE: IconTrash,
+  OPEN: IconArrowRight,
+  CATALOG: IconFileDescription,
+  ACTIVE: IconCircleCheck,
+  DRAFT: IconEdit,
+  HISTORY: IconHistory,
+})
+
+export function getProximityActionIcon(name) {
+  const normalized = String(name || '').trim().toUpperCase()
+  return PROXIMITY_ACTION_ICONS[normalized] || null
+}
 
 export function normalizeProximityIconDomain(domain) {
   const normalized = String(domain || 'OTHER').trim().toUpperCase()

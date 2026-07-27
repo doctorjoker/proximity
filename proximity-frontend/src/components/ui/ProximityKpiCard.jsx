@@ -1,43 +1,36 @@
-import { Box, ButtonBase, Paper, Stack, Typography } from "@mui/material";
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-
-const TONES = {
-  primary: { main: "#2563eb", soft: "rgba(37,99,235,0.10)" },
-  success: { main: "#16a34a", soft: "rgba(22,163,74,0.10)" },
-  warning: { main: "#d97706", soft: "rgba(217,119,6,0.11)" },
-  error: { main: "#dc2626", soft: "rgba(220,38,38,0.10)" },
-  cyan: { main: "#0891b2", soft: "rgba(8,145,178,0.10)" },
-};
+import { Box, ButtonBase, Paper, Stack, Typography } from '@mui/material'
+import ProximityActionIcon from '../icons/ProximityActionIcon'
+import { proximityDesignTokens } from '../../theme'
 
 /**
- * Golden Reference KPI card copied from the Proximity Dashboard.
- * Proportions, icon rail, typography and semantic tones are intentionally
- * centralised here so feature pages cannot drift into a different product UI.
+ * Golden Reference KPI card from the Proximity Dashboard.
+ * This is the one implementation used by Dashboard and WorkspaceMetricCard.
  */
 export default function ProximityKpiCard({
   label,
   value,
   helper,
   icon: Icon,
-  tone = "primary",
-  actionLabel = "Apri",
+  tone = 'primary',
+  actionLabel = 'Apri',
   onClick,
 }) {
-  const palette = TONES[tone] || TONES.primary;
+  const palette = proximityDesignTokens.colors.tones[tone]
+    || proximityDesignTokens.colors.tones.primary
 
   return (
     <Paper
       variant="outlined"
       sx={{
         minHeight: 138,
-        borderRadius: 3,
-        borderColor: "divider",
-        overflow: "hidden",
-        transition: "transform .16s ease, box-shadow .16s ease, border-color .16s ease",
-        "&:hover": onClick
+        borderRadius: proximityDesignTokens.radius.large,
+        borderColor: 'divider',
+        overflow: 'hidden',
+        transition: proximityDesignTokens.transitions.card,
+        '&:hover': onClick
           ? {
-              transform: "translateY(-2px)",
-              boxShadow: "0 14px 28px rgba(15,23,42,0.08)",
+              transform: 'translateY(-2px)',
+              boxShadow: proximityDesignTokens.shadows.hover,
               borderColor: palette.main,
             }
           : undefined,
@@ -47,53 +40,53 @@ export default function ProximityKpiCard({
         onClick={onClick}
         disabled={!onClick}
         sx={{
-          width: "100%",
+          width: '100%',
           minHeight: 138,
           p: 0,
-          textAlign: "left",
-          alignItems: "stretch",
-          justifyContent: "flex-start",
+          textAlign: 'left',
+          alignItems: 'stretch',
+          justifyContent: 'flex-start',
         }}
       >
         <Box
           sx={{
             width: 76,
             flexShrink: 0,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             bgcolor: palette.soft,
             color: palette.main,
-            borderRight: "1px solid",
-            borderColor: "divider",
+            borderRight: '1px solid',
+            borderColor: 'divider',
           }}
         >
-          {Icon ? <Icon sx={{ fontSize: 34 }} /> : null}
+          {Icon ? <Icon size={34} stroke={1.8} /> : null}
         </Box>
 
         <Stack sx={{ flex: 1, minWidth: 0, px: 2.1, py: 1.8 }} justifyContent="space-between">
           <Box>
-            <Typography variant="body2" color="text.secondary" fontWeight={800}>
+            <Typography variant="body2" color="text.secondary" fontWeight={proximityDesignTokens.typography.weights.bold}>
               {label}
             </Typography>
-            <Typography variant="h4" fontWeight={950} sx={{ mt: 0.3, lineHeight: 1.05 }}>
+            <Typography variant="h4" fontWeight={proximityDesignTokens.typography.weights.display} sx={{ mt: 0.3, lineHeight: 1.05 }}>
               {value ?? 0}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.45 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.45 }}>
               {helper}
             </Typography>
           </Box>
 
           {onClick ? (
             <Stack direction="row" spacing={0.45} alignItems="center" justifyContent="flex-end" sx={{ color: palette.main }}>
-              <Typography variant="caption" fontWeight={900}>
+              <Typography variant="caption" fontWeight={proximityDesignTokens.typography.weights.strong}>
                 {actionLabel}
               </Typography>
-              <ArrowForwardIcon sx={{ fontSize: 15 }} />
+              <ProximityActionIcon name="OPEN" size={15} />
             </Stack>
           ) : null}
         </Stack>
       </ButtonBase>
     </Paper>
-  );
+  )
 }

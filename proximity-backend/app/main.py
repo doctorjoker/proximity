@@ -88,6 +88,9 @@ from app.modules.procedure_monitoring.router import (
 
 from app.modules.procedure_runtime.router import router as procedure_runtime_router
 
+from app.modules.provisioning_profiles.router import (
+    router as provisioning_profiles_router,
+)
 
 app = FastAPI(
     title=settings.app_name,
@@ -173,6 +176,8 @@ app.include_router(procedure_publication_router)
 app.include_router(procedure_monitoring_router)
 
 app.include_router(procedure_runtime_router)
+
+app.include_router(provisioning_profiles_router)
 
 @app.get("/health")
 async def health():

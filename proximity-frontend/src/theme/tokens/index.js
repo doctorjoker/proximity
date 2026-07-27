@@ -1,0 +1,6 @@
+export { proximityColors } from './colors'
+export { proximitySpacing } from './spacing'
+export { proximityRadius } from './radius'
+export { proximityShadows } from './shadows'
+export { proximityTypography } from './typography'
+export { proximityTransitions } from './transitions'

@@ -62,6 +62,13 @@ export const navigationSections = [
           pathname.startsWith("/customer-care"),
       },
       {
+        label: "Provisioning",
+        path: "/provisioning",
+        icon: AccountTree,
+        breadcrumb: ["Operations", "Provisioning"],
+        match: (pathname) => pathname.startsWith("/provisioning"),
+      },
+      {
         label: "Devices",
         path: "/devices",
         icon: Devices,
