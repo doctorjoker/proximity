@@ -1,14 +1,31 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, LinearProgress } from "@mui/material";
 
-import CustomerHeader from "../components/customers/CustomerHeader";
-import CustomerMetrics from "../components/customers/CustomerMetrics";
-import CustomerToolbar from "../components/customers/CustomerToolbar";
-import CustomerWorkspace from "../components/customers/CustomerWorkspace";
+import {
+  WorkspaceHeader,
+  WorkspaceLayout,
+  WorkspaceToolbar,
+  KpiCard,
+  KpiGrid,
+  PrimaryActionButton,
+  SecondaryActionButton,
+  TertiaryActionButton,
+  WorkspaceCard,
+  WorkspaceSection,
+} from "../components/proximity";
+import ProximityActionIcon from "../components/icons/ProximityActionIcon";
+import { getProximityIconConfig } from "../components/icons/proximityIconRegistry";
+
+import CustomerFilters from "../components/customers/CustomerFilters";
+import CustomerTable from "../components/customers/CustomerTable";
 import CustomerCreateDialog from "../components/customers/CustomerCreateDialog";
 import Customer360Drawer from "../components/customers/Customer360Drawer";
-import SurfaceCard from "../components/ui/SurfaceCard";
-import WorkspaceTemplate from "../components/ui/WorkspaceTemplate";
+
+const CustomerIcon = getProximityIconConfig("CUSTOMER").icon;
+const LinkedIcon = getProximityIconConfig("NETWORKING").icon;
+const RouterIcon = getProximityIconConfig("ROUTER").icon;
+const UnlinkedIcon = getProximityIconConfig("DIAGNOSTICS").icon;
+const RefreshIcon = getProximityIconConfig("DEVICE_REBOOT").icon;
 
 const API_BASE = "";
 
@@ -140,36 +157,127 @@ export default function Customers() {
   };
 
   return (
-    <WorkspaceTemplate sx={{ color: "#0f172a" }}>
-      <CustomerHeader onCreate={() => setNewCustomerOpen(true)} />
-      <CustomerMetrics summary={summary} onFilter={setStatusFilter} />
-      <CustomerToolbar
-        query={query}
-        onQueryChange={setQuery}
-        onSearch={loadCustomers}
-        onRefresh={loadCustomers}
-        loading={loading}
-        status={statusFilter}
-        onStatusChange={setStatusFilter}
-        profile={profileFilter}
-        onProfileChange={setProfileFilter}
-        profiles={profiles}
-        onExport={exportCustomers}
-      />
+    <>
+      <WorkspaceLayout
+        header={
+          <WorkspaceHeader
+            iconDomain="CUSTOMER"
+            breadcrumbs={["Operations", "Customers"]}
+            eyebrow="CUSTOMER MANAGEMENT"
+            title="Customers Workspace"
+            subtitle="Gestione clienti, associazioni PPPoE, servizi e Customer 360."
+            status={`${summary.linked}/${summary.total} collegati`}
+            metadata={[
+              { label: "Clienti", value: summary.total },
+              { label: "Collegati", value: summary.linked },
+              { label: "Router", value: summary.devices },
+              { label: "Senza CPE", value: summary.unlinked },
+            ]}
+            actions={
+              <WorkspaceToolbar>
+                <PrimaryActionButton
+                  startIcon={<ProximityActionIcon name="ADD" />}
+                  onClick={() => setNewCustomerOpen(true)}
+                >
+                  Nuovo cliente
+                </PrimaryActionButton>
+                <SecondaryActionButton
+                  startIcon={<RefreshIcon size={18} stroke={1.9} />}
+                  onClick={loadCustomers}
+                  loading={loading}
+                >
+                  Aggiorna
+                </SecondaryActionButton>
+              </WorkspaceToolbar>
+            }
+          />
+        }
+      >
+        <Box sx={{ maxWidth: 1560, mx: "auto", width: "100%" }}>
+          <WorkspaceSection
+            eyebrow="Operations"
+            title="Customer management"
+            description="Anagrafiche, associazioni CPE e copertura operativa del portafoglio clienti."
+            sx={{ mb: 3 }}
+          >
+            <KpiGrid>
+              <KpiCard
+                label="Clienti"
+                value={summary.total}
+                helper="Anagrafiche caricate"
+                icon={CustomerIcon}
+                tone="primary"
+                action={
+                  <TertiaryActionButton size="compact" onClick={() => setStatusFilter("ALL")}>
+                    Apri elenco
+                  </TertiaryActionButton>
+                }
+              />
+              <KpiCard
+                label="Collegati"
+                value={summary.linked}
+                helper="Matching PPPoE/CPE"
+                icon={LinkedIcon}
+                tone="success"
+                action={
+                  <TertiaryActionButton size="compact" onClick={() => setStatusFilter("LINKED")}>
+                    Filtra collegati
+                  </TertiaryActionButton>
+                }
+              />
+              <KpiCard
+                label="Router"
+                value={summary.devices}
+                helper="Apparati associati"
+                icon={RouterIcon}
+                tone="warning"
+              />
+              <KpiCard
+                label="Senza CPE"
+                value={summary.unlinked}
+                helper="Clienti da associare"
+                icon={UnlinkedIcon}
+                tone={summary.unlinked > 0 ? "error" : "neutral"}
+                action={
+                  <TertiaryActionButton size="compact" onClick={() => setStatusFilter("UNLINKED")}>
+                    Filtra criticità
+                  </TertiaryActionButton>
+                }
+              />
+            </KpiGrid>
+          </WorkspaceSection>
 
-      {error ? (
-        <SurfaceCard sx={{ mb: 2, borderColor: "#fecaca", bgcolor: "#fff7f7" }}>
-          <Box sx={{ p: 2, color: "#b91c1c", fontWeight: 800 }}>{error}</Box>
-        </SurfaceCard>
-      ) : null}
+          <CustomerFilters
+            query={query}
+            onQueryChange={setQuery}
+            onSearch={loadCustomers}
+            onRefresh={loadCustomers}
+            loading={loading}
+            status={statusFilter}
+            onStatusChange={setStatusFilter}
+            profile={profileFilter}
+            onProfileChange={setProfileFilter}
+            profiles={profiles}
+            onExport={exportCustomers}
+          />
 
-      {loading ? <LinearProgress sx={{ mb: 1.5, borderRadius: 2 }} /> : null}
+          {error ? (
+            <WorkspaceCard sx={{ mb: 2, borderColor: "#fecaca", bgcolor: "#fff7f7" }} contentSx={{ p: 0 }}>
+              <Box sx={{ p: 2, color: "#b91c1c", fontWeight: 800 }}>{error}</Box>
+            </WorkspaceCard>
+          ) : null}
 
-      <CustomerWorkspace
-        customers={visibleCustomers}
-        loading={loading}
-        onOpenCustomer={openCustomer}
-      />
+          {loading ? <LinearProgress sx={{ mb: 1.5, borderRadius: 2 }} /> : null}
+
+          <WorkspaceCard sx={{ overflow: "hidden" }} contentSx={{ p: 0 }}>
+            <CustomerTable
+              customers={visibleCustomers}
+              loading={loading}
+              onOpenCustomer={openCustomer}
+            />
+          </WorkspaceCard>
+        </Box>
+      </WorkspaceLayout>
 
       <CustomerCreateDialog open={newCustomerOpen} onClose={() => setNewCustomerOpen(false)} />
 
@@ -184,6 +292,6 @@ export default function Customers() {
         }}
         onOpenRouter={openRouterAccess}
       />
-    </WorkspaceTemplate>
+    </>
   );
 }

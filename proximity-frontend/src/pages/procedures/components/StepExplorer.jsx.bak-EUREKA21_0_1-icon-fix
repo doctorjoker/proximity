@@ -11,14 +11,14 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import { IconBox, IconChevronDown, IconSearch } from '@tabler/icons-react'
+import { IconChevronDown, IconSearch } from '@tabler/icons-react'
 
 import { getWorkflowDefinitionGroups } from '../designer/registry'
 
 const STEP_GROUPS = getWorkflowDefinitionGroups()
 
 function StepItem({ item, color, onSelect }) {
-  const ItemIcon = item.icon || IconBox
+  const ItemIcon = item.icon
 
   const select = () => onSelect?.(item)
 
@@ -97,7 +97,7 @@ export default function StepExplorer({ onSelectStep }) {
 
       <Box sx={{ flex: 1, overflowY: 'auto', p: 1.2 }}>
         {filteredGroups.map((group) => {
-          const GroupIcon = group.icon || IconBox
+          const GroupIcon = group.icon
           const isExpanded = expanded.includes(group.id)
           return (
             <Accordion key={group.id} disableGutters expanded={isExpanded} onChange={handleAccordionChange(group.id)} elevation={0} sx={{ mb: 1, border: '1px solid', borderColor: isExpanded ? `${group.color}66` : 'divider', borderRadius: '12px !important', overflow: 'hidden', '&::before': { display: 'none' } }}>

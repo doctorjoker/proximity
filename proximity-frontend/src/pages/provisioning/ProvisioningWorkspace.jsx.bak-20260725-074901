@@ -1,0 +1,202 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Alert, Button, CircularProgress, IconButton, Snackbar } from '@mui/material'
+import AddIcon from '@mui/icons-material/Add'
+import WorkspaceLayout from '../../components/workspace/WorkspaceLayout'
+import WorkspaceTabs from '../../components/workspace/WorkspaceTabs'
+import provisioningProfilesApi from '../../services/provisioningProfilesApi'
+import ProfilesList from './components/ProfilesList'
+import ProfileHeader from './components/ProfileHeader'
+import GeneralTab from './components/tabs/GeneralTab'
+import ConfigurationTab from './components/tabs/ConfigurationTab'
+import ProcedureTab from './components/tabs/ProcedureTab'
+import PreviewTab from './components/tabs/PreviewTab'
+import HistoryTab from './components/tabs/HistoryTab'
+
+const TABS = [
+  { value: 'general', label: 'Generale' },
+  { value: 'configuration', label: 'Configurazione' },
+  { value: 'procedure', label: 'Procedura' },
+  { value: 'preview', label: 'Preview' },
+  { value: 'history', label: 'Storico' },
+]
+
+function normalizeList(payload) {
+  if (Array.isArray(payload)) return payload
+  return payload?.items || payload?.results || []
+}
+
+export default function ProvisioningWorkspace() {
+  const [profiles, setProfiles] = useState([])
+  const [selectedCode, setSelectedCode] = useState(null)
+  const [profile, setProfile] = useState(null)
+  const [versions, setVersions] = useState([])
+  const [version, setVersion] = useState(null)
+  const [items, setItems] = useState([])
+  const [configurationTypes, setConfigurationTypes] = useState([])
+  const [tab, setTab] = useState('general')
+  const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [itemsLoading, setItemsLoading] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+
+  const loadProfiles = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const data = normalizeList(await provisioningProfilesApi.getProfiles())
+      setProfiles(data)
+      setSelectedCode((current) => current || data[0]?.profile_code || null)
+    } catch (err) {
+      setError(err.message || 'Errore durante il caricamento dei profili')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadProfiles()
+    provisioningProfilesApi.getConfigurationTypes()
+      .then(setConfigurationTypes)
+      .catch((err) => setError(err.message || 'Errore durante il caricamento del catalogo configurazioni'))
+  }, [loadProfiles])
+
+  useEffect(() => {
+    if (!selectedCode) {
+      setProfile(null)
+      setVersions([])
+      setVersion(null)
+      setItems([])
+      return
+    }
+
+    let active = true
+    ;(async () => {
+      try {
+        const [profileData, versionsData] = await Promise.all([
+          provisioningProfilesApi.getProfile(selectedCode),
+          provisioningProfilesApi.getVersions(selectedCode),
+        ])
+        if (!active) return
+        const normalizedVersions = normalizeList(versionsData)
+        const currentVersion = normalizedVersions.find((entry) => entry.is_current) || normalizedVersions[0] || null
+        setProfile(profileData)
+        setVersions(normalizedVersions)
+        setVersion(currentVersion)
+      } catch (err) {
+        if (active) setError(err.message || 'Errore durante il caricamento del profilo')
+      }
+    })()
+    return () => { active = false }
+  }, [selectedCode])
+
+  useEffect(() => {
+    if (!version?.id) {
+      setItems([])
+      return
+    }
+    let active = true
+    setItemsLoading(true)
+    provisioningProfilesApi.getItems(version.id)
+      .then((data) => { if (active) setItems(normalizeList(data)) })
+      .catch((err) => { if (active) setError(err.message || 'Errore durante il caricamento della configurazione') })
+      .finally(() => { if (active) setItemsLoading(false) })
+    return () => { active = false }
+  }, [version?.id])
+
+  const filteredProfiles = useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    if (!needle) return profiles
+    return profiles.filter((entry) => [entry.profile_code, entry.name, entry.profile_name, entry.technology]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(needle)))
+  }, [profiles, search])
+
+  const handlePublish = async () => {
+    if (!version?.id) return
+    try {
+      const updated = await provisioningProfilesApi.publishVersion(version.id)
+      setVersion(updated)
+      setVersions((current) => current.map((entry) => entry.id === updated.id ? updated : entry))
+      setMessage('Versione pubblicata correttamente')
+    } catch (err) {
+      setError(err.message || 'Pubblicazione non riuscita')
+    }
+  }
+
+  const refreshItems = async () => {
+    if (!version?.id) return
+    setItems(await provisioningProfilesApi.getItems(version.id))
+  }
+
+  const handleCreateItem = async (payload) => {
+    await provisioningProfilesApi.createItem(version.id, payload)
+    await refreshItems()
+    setMessage('Configurazione creata correttamente')
+  }
+
+  const handleUpdateItem = async (itemId, payload) => {
+    const { item_code, ...changes } = payload
+    await provisioningProfilesApi.updateItem(itemId, changes)
+    await refreshItems()
+    setMessage('Configurazione aggiornata correttamente')
+  }
+
+  const handleDeleteItem = async (item) => {
+    await provisioningProfilesApi.deleteItem(item.id)
+    await refreshItems()
+    setMessage('Configurazione eliminata')
+  }
+
+  const content = {
+    general: <GeneralTab profile={profile} version={version} />,
+    configuration: <ConfigurationTab version={version} items={items} types={configurationTypes} loading={itemsLoading} onCreateItem={handleCreateItem} onUpdateItem={handleUpdateItem} onDeleteItem={handleDeleteItem} />,
+    procedure: <ProcedureTab version={version} />,
+    preview: <PreviewTab version={version} items={items} />,
+    history: <HistoryTab versions={versions} />,
+  }[tab]
+
+  if (loading) {
+    return <CircularProgress sx={{ m: 4 }} />
+  }
+
+  return (
+    <>
+      {error && <Alert severity="error" onClose={() => setError('')} sx={{ borderRadius: 0 }}>{error}</Alert>}
+      <WorkspaceLayout
+        mobileOpen={mobileOpen}
+        onMobileClose={() => setMobileOpen(false)}
+        sidebar={(
+          <ProfilesList
+            profiles={filteredProfiles}
+            selectedCode={selectedCode}
+            onSelect={(code) => { setSelectedCode(code); setMobileOpen(false) }}
+            search={search}
+            onSearchChange={setSearch}
+            actions={(
+              <IconButton size="small" title="Nuovo profilo" onClick={() => setMessage('Creazione profilo prevista in EUREKA 14.1.2')}>
+                <AddIcon fontSize="small" />
+              </IconButton>
+            )}
+          />
+        )}
+        header={(
+          <ProfileHeader
+            profile={profile}
+            version={version}
+            onMenuClick={() => setMobileOpen(true)}
+            onNew={() => setMessage('Creazione profilo prevista in EUREKA 14.1.2')}
+            onSave={() => setMessage('Nessuna modifica da salvare nel bootstrap 14.1.1')}
+            onPublish={handlePublish}
+            publishDisabled={!version?.id || version?.status !== 'DRAFT'}
+          />
+        )}
+        tabs={<WorkspaceTabs value={tab} onChange={setTab} items={TABS} />}
+      >
+        {content}
+      </WorkspaceLayout>
+      <Snackbar open={Boolean(message)} autoHideDuration={3500} onClose={() => setMessage('')} message={message} />
+    </>
+  )
+}

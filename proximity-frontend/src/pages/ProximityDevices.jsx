@@ -1,5 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  KpiCard,
+  KpiGrid,
+  PrimaryActionButton,
+  SecondaryActionButton,
+  StatusChip,
+  WorkspaceHeader,
+  WorkspaceLayout,
+  WorkspaceSection,
+  WorkspaceTabs,
+  WorkspaceToolbar,
+} from "../components/proximity";
+import { DevicePreviewPanel, DevicesFilters, DevicesTable } from "../components/devices";
+import ProximityActionIcon from "../components/icons/ProximityActionIcon";
+import { getProximityActionIcon, getProximityIconConfig } from "../components/icons/proximityIconRegistry";
+import {
   Alert,
   Box,
   Button,
@@ -35,6 +50,13 @@ import {
 } from "@mui/material";
 
 const API_BASE = "";
+
+const DevicesIcon = getProximityIconConfig("ROUTER").icon;
+const OnlineIcon = getProximityActionIcon("ACTIVE");
+const OfflineIcon = getProximityIconConfig("DIAGNOSTICS").icon;
+const FirmwareIcon = getProximityIconConfig("FIRMWARE").icon;
+const UpgradeIcon = getProximityIconConfig("WORKFLOW").icon;
+const RefreshIcon = getProximityIconConfig("DEVICE_REBOOT").icon;
 
 const emptyFirmwareForm = {
   vendor: "TP-Link",
@@ -161,20 +183,6 @@ const getHealthTone = (score) => {
   return { label: "Critico", color: "error", bg: "rgba(239,68,68,0.13)", fg: "#dc2626" };
 };
 
-const StatusPill = ({ online, label }) => (
-  <Chip
-    size="small"
-    label={label || (online ? "Online" : "Offline")}
-    sx={{
-      fontWeight: 800,
-      borderRadius: 999,
-      background: online ? "rgba(16,185,129,0.15)" : "rgba(100,116,139,0.14)",
-      color: online ? "#059669" : "#64748b",
-      border: online ? "1px solid rgba(16,185,129,0.24)" : "1px solid rgba(100,116,139,0.18)",
-    }}
-  />
-);
-
 const SoftCard = ({ children, sx }) => (
   <Card
     elevation={0}
@@ -213,6 +221,7 @@ export default function ProximityDevices() {
   const [jobs, setJobs] = useState([]);
 
   const [selected, setSelected] = useState(null);
+  const [previewDeviceId, setPreviewDeviceId] = useState(null);
   const [overview, setOverview] = useState(null);
   const [parameters, setParameters] = useState([]);
   const [wifi, setWifi] = useState(null);
@@ -321,9 +330,16 @@ export default function ProximityDevices() {
   const featuredDevices = useMemo(() => {
     return [...devices]
       .filter((device) => isAssociatedCustomer(device))
-      .sort((a, b) => Number(Boolean(b.online)) - Number(Boolean(a.online)))
-      .slice(0, 6);
+      .sort((a, b) => Number(Boolean(b.online)) - Number(Boolean(a.online)));
   }, [devices]);
+
+  const previewDevice = useMemo(() => {
+    if (previewDeviceId) {
+      const current = devices.find((device) => device.id === previewDeviceId);
+      if (current) return current;
+    }
+    return featuredDevices[0] || filteredDevices[0] || null;
+  }, [devices, featuredDevices, filteredDevices, previewDeviceId]);
 
   const loadDevices = async () => {
     try {
@@ -792,443 +808,152 @@ URL: ${data.url}`);
   const heroGradient = "linear-gradient(135deg, #0f172a 0%, #1e3a8a 44%, #0891b2 100%)";
 
   return (
-    <Box
-      sx={{
-        minHeight: "100vh",
-        p: { xs: 2, md: 4 },
-        background:
-          "radial-gradient(circle at top left, rgba(59,130,246,0.16), transparent 34%), radial-gradient(circle at top right, rgba(20,184,166,0.14), transparent 32%), #f7fafc",
-      }}
-    >
-      <Box sx={{ maxWidth: 1560, mx: "auto" }}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 3, md: 4 },
-            borderRadius: 6,
-            color: "white",
-            background: heroGradient,
-            position: "relative",
-            overflow: "hidden",
-            boxShadow: "0 34px 90px rgba(15,23,42,0.24)",
-            mb: 3,
-          }}
+    <>
+      <WorkspaceLayout
+        header={
+          <WorkspaceHeader
+            iconDomain="ROUTER"
+            breadcrumbs={["Operations", "Devices"]}
+            eyebrow="DEVICE MANAGEMENT"
+            title="Devices Workspace"
+            subtitle="Inventario CPE, diagnostica, firmware, Wi-Fi e operazioni ACS."
+            status={`${kpi.online}/${kpi.devices} online`}
+            metadata={[
+              { label: "Dispositivi", value: kpi.devices },
+              { label: "Offline", value: kpi.offline },
+              { label: "Firmware", value: kpi.firmware },
+              { label: "Upgrade", value: kpi.jobs },
+            ]}
+            actions={
+              <WorkspaceToolbar>
+                <PrimaryActionButton startIcon={<RefreshIcon size={18} stroke={1.9} />} onClick={loadAll}>
+                  Aggiorna
+                </PrimaryActionButton>
+                <SecondaryActionButton startIcon={<ProximityActionIcon name="PUBLISH" />} onClick={() => setFirmwareUploadOpen(true)}>
+                  Carica firmware
+                </SecondaryActionButton>
+                <SecondaryActionButton startIcon={<ProximityActionIcon name="ADD" />} onClick={() => setMassUpgradeOpen(true)}>
+                  Nuova campagna
+                </SecondaryActionButton>
+              </WorkspaceToolbar>
+            }
+          />
+        }
+        tabs={
+          <WorkspaceTabs
+            value={activeView}
+            onChange={(value) => {
+              setActiveView(value);
+              setPage(0);
+            }}
+            items={[
+              { value: "customers", label: "Customer view" },
+              { value: "devices", label: "Inventory", status: kpi.devices },
+              { value: "firmware", label: "Firmware", status: kpi.firmware },
+              { value: "campaigns", label: "Campaigns", status: kpi.jobs },
+            ]}
+          />
+        }
+      >
+        <Box sx={{ maxWidth: 1560, mx: "auto", width: "100%" }}>
+          {pageLoading && <LinearProgress sx={{ mb: 2, borderRadius: 999 }} />}
+
+        <WorkspaceSection
+          eyebrow="Operations"
+          title="Device management"
+          description="Stato operativo dell'inventario CPE, connettività, firmware e campagne di upgrade."
+          sx={{ mb: 3 }}
         >
-          <Box
-            sx={{
-              position: "absolute",
-              width: 420,
-              height: 420,
-              borderRadius: "50%",
-              background: "rgba(255,255,255,0.12)",
-              right: -120,
-              top: -170,
-            }}
-          />
-          <Box
-            sx={{
-              position: "absolute",
-              width: 220,
-              height: 220,
-              borderRadius: "50%",
-              background: "rgba(45,212,191,0.18)",
-              right: 210,
-              bottom: -110,
-            }}
-          />
+          <KpiGrid>
+            <KpiCard
+              label="Clienti gestiti"
+              value={kpi.devices}
+              helper={`${kpi.onlineRate}% online`}
+              icon={DevicesIcon}
+              tone="primary"
+            />
+            <KpiCard
+              label="Online"
+              value={kpi.online}
+              helper="Router raggiungibili"
+              icon={OnlineIcon}
+              tone="success"
+            />
+            <KpiCard
+              label="Da verificare"
+              value={kpi.offline}
+              helper="Offline o non aggiornati"
+              icon={OfflineIcon}
+              tone="warning"
+            />
+            <KpiCard
+              label="Firmware"
+              value={kpi.firmware}
+              helper="Versioni a catalogo"
+              icon={FirmwareIcon}
+              tone="info"
+            />
+            <KpiCard
+              label="Upgrade"
+              value={kpi.jobs}
+              helper={`${kpi.failed} falliti`}
+              icon={UpgradeIcon}
+              tone={kpi.failed > 0 ? "error" : "neutral"}
+            />
+          </KpiGrid>
+        </WorkspaceSection>
 
-          <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={3} sx={{ position: "relative" }}>
-            <Box>
-              <Chip
-                label="Proximity by NOVASpace"
-                sx={{
-                  mb: 2,
-                  color: "white",
-                  fontWeight: 900,
-                  background: "rgba(255,255,255,0.14)",
-                  border: "1px solid rgba(255,255,255,0.22)",
-                }}
-              />
-              <Typography variant="h3" fontWeight={950} sx={{ letterSpacing: -1.3, maxWidth: 760 }}>
-                Customer Network Operations
-              </Typography>
-              <Typography sx={{ mt: 1.5, maxWidth: 760, color: "rgba(255,255,255,0.82)", fontSize: 17 }}>
-                Una vista chiara per capire clienti, WiFi, router, firmware e azioni operative senza perdere tempo nei dettagli ACS.
-              </Typography>
-            </Box>
-
-            <Stack direction="row" spacing={1.5} alignItems="flex-end" sx={{ flexWrap: "wrap", gap: 1.5 }}>
-              <Button
-                variant="contained"
-                onClick={loadAll}
-                sx={{
-                  borderRadius: 999,
-                  background: "white",
-                  color: "#0f172a",
-                  fontWeight: 900,
-                  px: 3,
-                  '&:hover': { background: "rgba(255,255,255,0.9)" },
-                }}
-              >
-                Aggiorna dashboard
-              </Button>
-              <Button
-                variant="outlined"
-                onClick={() => setFirmwareUploadOpen(true)}
-                sx={{
-                  borderRadius: 999,
-                  color: "white",
-                  borderColor: "rgba(255,255,255,0.56)",
-                  fontWeight: 900,
-                  px: 3,
-                  '&:hover': { borderColor: "white", background: "rgba(255,255,255,0.08)" },
-                }}
-              >
-                Carica firmware
-              </Button>
-              <Button
-                variant="outlined"
-                onClick={() => setMassUpgradeOpen(true)}
-                sx={{
-                  borderRadius: 999,
-                  color: "white",
-                  borderColor: "rgba(255,255,255,0.56)",
-                  fontWeight: 900,
-                  px: 3,
-                  '&:hover': { borderColor: "white", background: "rgba(255,255,255,0.08)" },
-                }}
-              >
-                Nuova campagna
-              </Button>
-            </Stack>
-          </Stack>
-        </Paper>
-
-        {pageLoading && <LinearProgress sx={{ mb: 2, borderRadius: 999 }} />}
-
-        <Stack direction={{ xs: "column", lg: "row" }} spacing={2} sx={{ mb: 3 }}>
-          {[
-            { label: "Clienti gestiti", value: kpi.devices, note: `${kpi.onlineRate}% online` },
-            { label: "Online", value: kpi.online, note: "router raggiungibili" },
-            { label: "Da verificare", value: kpi.offline, note: "offline o non aggiornati" },
-            { label: "Firmware", value: kpi.firmware, note: "versioni a catalogo" },
-            { label: "Upgrade", value: kpi.jobs, note: `${kpi.failed} falliti` },
-          ].map((item) => (
-            <SoftCard key={item.label} sx={{ flex: 1 }}>
-              <CardContent sx={{ p: 2.5 }}>
-                <Typography variant="body2" sx={{ color: "#64748b", fontWeight: 800 }}>
-                  {item.label}
-                </Typography>
-                <Typography variant="h4" fontWeight={950} sx={{ color: "#0f172a", mt: 0.5 }}>
-                  {item.value}
-                </Typography>
-                <Typography variant="caption" sx={{ color: "#94a3b8", fontWeight: 700 }}>
-                  {item.note}
-                </Typography>
-              </CardContent>
-            </SoftCard>
-          ))}
-        </Stack>
-
-        <SoftCard sx={{ mb: 3 }}>
-          <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ xs: "stretch", md: "center" }}>
-              <TextField
-                fullWidth
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setPage(0);
-                }}
-                placeholder="Cerca cliente, indirizzo, seriale, modello, firmware, IP..."
-                variant="outlined"
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 999,
-                    background: "#f8fafc",
-                    fontWeight: 700,
-                  },
-                }}
-              />
-              <FormControl sx={{ minWidth: 160 }}>
-                <InputLabel>Stato</InputLabel>
-                <Select
-                  label="Stato"
-                  value={statusFilter}
-                  onChange={(event) => {
-                    setStatusFilter(event.target.value);
-                    setPage(0);
-                  }}
-                  sx={{ borderRadius: 999, background: "#f8fafc", fontWeight: 800 }}
-                >
-                  <MenuItem value="ALL">Tutti</MenuItem>
-                  <MenuItem value="ONLINE">Online</MenuItem>
-                  <MenuItem value="OFFLINE">Offline</MenuItem>
-                </Select>
-              </FormControl>
-              <FormControl sx={{ minWidth: 220 }}>
-                <InputLabel>Modello</InputLabel>
-                <Select
-                  label="Modello"
-                  value={modelFilter}
-                  onChange={(event) => {
-                    setModelFilter(event.target.value);
-                    setPage(0);
-                  }}
-                  sx={{ borderRadius: 999, background: "#f8fafc", fontWeight: 800 }}
-                >
-                  <MenuItem value="ALL">Tutti</MenuItem>
-                  {models.map((model) => (
-                    <MenuItem key={model} value={model}>
-                      {model}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Stack>
-
-            <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap", gap: 1 }}>
-              {[
-                ["customers", "Customer view"],
-                ["devices", "Devices"],
-                ["firmware", "Firmware Repository"],
-                ["campaigns", "Campaign Manager"],
-              ].map(([key, label]) => (
-                <Chip
-                  key={key}
-                  clickable
-                  label={label}
-                  onClick={() => setActiveView(key)}
-                  sx={{
-                    fontWeight: 900,
-                    px: 1,
-                    borderRadius: 999,
-                    background: activeView === key ? "#0f172a" : "#eef2f7",
-                    color: activeView === key ? "white" : "#334155",
-                    '&:hover': { background: activeView === key ? "#0f172a" : "#e2e8f0" },
-                  }}
-                />
-              ))}
-            </Stack>
-          </CardContent>
-        </SoftCard>
+        <DevicesFilters
+          query={query}
+          onQueryChange={(value) => { setQuery(value); setPage(0); }}
+          statusFilter={statusFilter}
+          onStatusFilterChange={(value) => { setStatusFilter(value); setPage(0); }}
+          modelFilter={modelFilter}
+          onModelFilterChange={(value) => { setModelFilter(value); setPage(0); }}
+          models={models}
+        />
 
         {activeView === "customers" && (
           <>
             <SectionTitle
-              title="Clienti in evidenza"
-              subtitle="Vista semplice: cliente, stato servizio, WiFi e azioni rapide. La parte tecnica resta nel drawer."
+              title="Anteprima cliente e device"
+              subtitle="La tabella sottostante è l’unico elenco operativo. Qui resta visibile solo il contesto del device selezionato."
             />
-            <Box
-              sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", md: "repeat(2, 1fr)", xl: "repeat(3, 1fr)" },
-                gap: 2,
-                mb: 3,
-              }}
-            >
-              {featuredDevices.map((device) => {
-                const fakeScore = device.online ? safeNumber(device.wifi_score, 82) : safeNumber(device.wifi_score, null);
-                const tone = getHealthTone(fakeScore);
-                return (
-                  <SoftCard key={device.id}>
-                    <CardContent sx={{ p: 2.5 }}>
-                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
-                        <Box sx={{ minWidth: 0 }}>
-                          <Typography variant="h6" fontWeight={950} noWrap>
-                            {customerName(device)}
-                          </Typography>
-                          <Typography variant="body2" sx={{ color: "#64748b", mt: 0.25 }} noWrap>
-                            {placeName(device)}
-                          </Typography>
-                        </Box>
-                        <StatusPill online={device.online} />
-                      </Stack>
-
-                      <Box
-                        sx={{
-                          mt: 2,
-                          p: 2,
-                          borderRadius: 4,
-                          background: tone.bg,
-                          border: `1px solid ${tone.bg}`,
-                        }}
-                      >
-                        <Stack direction="row" justifyContent="space-between" alignItems="center">
-                          <Box>
-                            <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 900 }}>
-                              WiFi Experience
-                            </Typography>
-                            <Typography variant="h4" fontWeight={950} sx={{ color: tone.fg }}>
-                              {fakeScore !== null ? `${fakeScore}/100` : "N/D"}
-                            </Typography>
-                          </Box>
-                          <Chip label={tone.label} size="small" sx={{ fontWeight: 900, color: tone.fg, background: "rgba(255,255,255,0.72)" }} />
-                        </Stack>
-                      </Box>
-
-                      <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap", gap: 1 }}>
-                        <Chip size="small" label={`Router ${safeText(device.model)}`} sx={{ fontWeight: 800 }} />
-                        <Chip size="small" label={`FW ${safeText(device.software_version)}`} sx={{ fontWeight: 800 }} />
-                      </Stack>
-
-                      <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
-                        <Button variant="contained" onClick={() => openDevice(device)} sx={{ borderRadius: 999, fontWeight: 900 }}>
-                          Apri cliente
-                        </Button>
-                        <Button variant="outlined" onClick={() => runSingleFirmwareUpgrade(device.id)} sx={{ borderRadius: 999, fontWeight: 900 }}>
-                          Aggiorna FW
-                        </Button>
-                      </Stack>
-                    </CardContent>
-                  </SoftCard>
-                );
-              })}
-              {featuredDevices.length === 0 && (
-                <SoftCard>
-                  <CardContent sx={{ p: 3, textAlign: "center" }}>
-                    <Typography fontWeight={950}>Nessun cliente associato</Typography>
-                    <Typography variant="body2" sx={{ color: "#64748b", mt: 0.5 }}>
-                      I CPE senza cliente sono disponibili nel tab Devices.
-                    </Typography>
-                  </CardContent>
-                </SoftCard>
-              )}
-            </Box>
+            <DevicePreviewPanel
+              device={previewDevice}
+              customerName={customerName}
+              placeName={placeName}
+              safeText={safeText}
+              score={previewDevice ? (previewDevice.online ? safeNumber(previewDevice.wifi_score, 82) : safeNumber(previewDevice.wifi_score, null)) : null}
+              healthTone={getHealthTone(previewDevice ? (previewDevice.online ? safeNumber(previewDevice.wifi_score, 82) : safeNumber(previewDevice.wifi_score, null)) : null)}
+              onOpen={openDevice}
+              onRefresh={(device) => runTask(device.id, "refresh")}
+              onFirmwareUpgrade={(device) => runSingleFirmwareUpgrade(device.id)}
+            />
           </>
         )}
-
         {(activeView === "customers" || activeView === "devices") && (
-          <SoftCard>
-            <CardContent sx={{ p: 0 }}>
-              <Box sx={{ p: 2.5, pb: 1.5 }}>
-                <SectionTitle
-                  title="Rete clienti"
-                  subtitle={`${filteredDevices.length} risultati filtrati. Seleziona device per upgrade massivo o apri il dettaglio cliente.`}
-                  action={
-                    <Stack direction="row" spacing={1}>
-                      <Button variant="outlined" onClick={selectVisibleDevices} sx={{ borderRadius: 999, fontWeight: 900 }}>
-                        Seleziona pagina
-                      </Button>
-                      <Button variant="contained" onClick={() => setMassUpgradeOpen(true)} sx={{ borderRadius: 999, fontWeight: 900 }}>
-                        Upgrade selezionati ({selectedDeviceIds.length})
-                      </Button>
-                    </Stack>
-                  }
-                />
-              </Box>
-
-              <TableContainer sx={{ maxHeight: 640 }}>
-                <Table stickyHeader size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell padding="checkbox" sx={{ fontWeight: 900, background: "#f8fafc" }}>
-                        <Checkbox
-                          checked={pagedDevices.length > 0 && pagedDevices.every((device) => selectedDeviceIds.includes(device.id))}
-                          indeterminate={pagedDevices.some((device) => selectedDeviceIds.includes(device.id)) && !pagedDevices.every((device) => selectedDeviceIds.includes(device.id))}
-                          onChange={selectVisibleDevices}
-                        />
-                      </TableCell>
-                      <TableCell sx={{ fontWeight: 950, background: "#f8fafc" }}>Cliente</TableCell>
-                      <TableCell sx={{ fontWeight: 950, background: "#f8fafc" }}>Servizio</TableCell>
-                      <TableCell sx={{ fontWeight: 950, background: "#f8fafc" }}>Router</TableCell>
-                      <TableCell sx={{ fontWeight: 950, background: "#f8fafc" }}>Firmware</TableCell>
-                      <TableCell sx={{ fontWeight: 950, background: "#f8fafc" }}>Stato</TableCell>
-                      <TableCell sx={{ fontWeight: 950, background: "#f8fafc" }}>Ultimo contatto</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 950, background: "#f8fafc" }}>Azioni</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {pagedDevices.map((device) => (
-                      <TableRow
-                        key={device.id}
-                        hover
-                        sx={{
-                          '& td': { borderColor: "rgba(15,23,42,0.06)", py: 1.2 },
-                          cursor: "pointer",
-                        }}
-                        onDoubleClick={() => openDevice(device)}
-                      >
-                        <TableCell padding="checkbox" onClick={(event) => event.stopPropagation()}>
-                          <Checkbox checked={selectedDeviceIds.includes(device.id)} onChange={() => toggleDeviceSelection(device.id)} />
-                        </TableCell>
-                        <TableCell>
-                          <Typography fontWeight={900} sx={{ color: "#0f172a" }}>
-                            {customerName(device)}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: "#64748b" }}>
-                            {getCustomerCode(device)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight={800} noWrap sx={{ maxWidth: 260 }}>
-                            {placeName(device)}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: "#64748b" }}>
-                            WAN {safeText(device.wan_ip)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight={900}>
-                            {safeText(device.manufacturer)} {safeText(device.model)}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: "#64748b" }}>
-                            {safeText(device.serial_number)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Chip size="small" label={safeText(device.software_version)} sx={{ fontWeight: 900, background: "#eef2ff", color: "#3730a3" }} />
-                        </TableCell>
-                        <TableCell>
-                          <StatusPill online={device.online} />
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight={800}>
-                            {formatDate(device.last_seen || device.updated_at || device.last_inform)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="right">
-                          <Stack direction="row" spacing={1} justifyContent="flex-end">
-                            <Button size="small" variant="contained" onClick={() => openDevice(device)} sx={{ borderRadius: 999, fontWeight: 900 }}>
-                              Apri
-                            </Button>
-                            <Button size="small" variant="outlined" onClick={() => runTask(device.id, "refresh")} sx={{ borderRadius: 999, fontWeight: 900 }}>
-                              Refresh
-                            </Button>
-                          </Stack>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {pagedDevices.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={8}>
-                          <Box sx={{ p: 4, textAlign: "center" }}>
-                            <Typography fontWeight={900}>Nessun risultato</Typography>
-                            <Typography variant="body2" sx={{ color: "#64748b" }}>
-                              Cambia ricerca o filtri.
-                            </Typography>
-                          </Box>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-
-              <TablePagination
-                component="div"
-                count={filteredDevices.length}
-                page={page}
-                onPageChange={(event, newPage) => setPage(newPage)}
-                rowsPerPage={rowsPerPage}
-                onRowsPerPageChange={(event) => {
-                  setRowsPerPage(parseInt(event.target.value, 10));
-                  setPage(0);
-                }}
-                rowsPerPageOptions={[25, 50, 100, 250]}
-              />
-            </CardContent>
-          </SoftCard>
+          <DevicesTable
+            devices={pagedDevices}
+            filteredCount={filteredDevices.length}
+            selectedIds={selectedDeviceIds}
+            previewDeviceId={previewDevice?.id || null}
+            page={page}
+            rowsPerPage={rowsPerPage}
+            onPageChange={(event, newPage) => setPage(newPage)}
+            onRowsPerPageChange={(event) => { setRowsPerPage(parseInt(event.target.value, 10)); setPage(0); }}
+            onToggleSelection={toggleDeviceSelection}
+            onSelectVisible={selectVisibleDevices}
+            onPreview={setPreviewDeviceId}
+            onOpen={openDevice}
+            onRefresh={(device) => runTask(device.id, "refresh")}
+            onMassUpgrade={() => setMassUpgradeOpen(true)}
+            customerName={customerName}
+            customerCode={getCustomerCode}
+            placeName={placeName}
+            safeText={safeText}
+            formatDate={formatDate}
+          />
         )}
 
         {activeView === "firmware" && (
@@ -1327,6 +1052,7 @@ URL: ${data.url}`);
           </SoftCard>
         )}
       </Box>
+      </WorkspaceLayout>
 
       <Dialog open={Boolean(firmwareDeleteTarget)} onClose={() => setFirmwareDeleteTarget(null)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ fontWeight: 950 }}>Elimina firmware</DialogTitle>
@@ -1487,7 +1213,7 @@ URL: ${data.url}`);
                     {safeText(firstValue(overview.site_address, selected?.site_address, selected?.wifi_customer?.site_address), placeName(selected))}
                   </Typography>
                 </Box>
-                <StatusPill online={overview.online} />
+                <StatusChip status={overview.online ? "ONLINE" : "OFFLINE"} />
               </Stack>
 
               <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap", gap: 1 }}>
@@ -1637,6 +1363,6 @@ URL: ${data.url}`);
           </Box>
         )}
       </Drawer>
-    </Box>
+    </>
   );
 }

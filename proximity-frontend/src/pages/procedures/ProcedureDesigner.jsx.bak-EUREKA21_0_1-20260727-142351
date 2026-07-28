@@ -10,11 +10,6 @@ import PropertiesPanel from './components/PropertiesPanel'
 import StepExplorer from './components/StepExplorer'
 import WorkflowCanvas from './components/WorkflowCanvas'
 import SimulationPanel from './components/SimulationPanel'
-import {
-  createDefaultProperties,
-  phaseTypeForStep,
-  resolveWorkflowDefinition,
-} from './designer/registry'
 
 const CATEGORY_STYLES = {
   provisioning: { color: '#2563EB', label: 'Provisioning' },
@@ -144,6 +139,17 @@ const getTransitionValue = (phase, kind) => {
   )
 }
 
+const createDefaultProperties = (step) => ({
+  name: step.label,
+  description: step.description,
+  timeout: 60,
+  retries: 3,
+  retryDelay: 5,
+  rollbackEnabled: false,
+  failurePolicy: 'STOP',
+  inputVariables: 'service_code\ncustomer_id\nrouter_serial',
+  outputVariables: 'status\nexecution_id\nlogs',
+})
 
 const createPhaseProperties = (phase, index) => ({
   name: getPhaseName(phase, index),
@@ -387,6 +393,14 @@ const normalizeTimeoutForApi = (value) => {
   const text = String(value ?? '').trim()
   if (!text) return '60s'
   return /^\d+(?:\.\d+)?$/.test(text) ? `${text}s` : text
+}
+
+const phaseTypeForStep = (step) => {
+  const category = String(step?.category || step?.id || '').toLowerCase()
+  if (category.includes('logic') || category.includes('condition')) return 'CONDITION'
+  if (category.includes('flow')) return 'FLOW'
+  if (category.includes('notification') || category.includes('customer')) return 'NOTIFICATION'
+  return 'ACTION'
 }
 
 const isPersistedPhaseId = (value) => /^\d+$/.test(String(value || ''))
@@ -978,8 +992,7 @@ export default function ProcedureDesigner({
     [nodes, selectedEdge],
   )
 
-  const addNode = useCallback(async (stepInput, position) => {
-    const step = resolveWorkflowDefinition(stepInput)
+  const addNode = useCallback(async (step, position) => {
     if (!procedureCode || !versionLabel) {
       setDesignerError('Impossibile creare la fase: contesto procedura/versione non disponibile.')
       return

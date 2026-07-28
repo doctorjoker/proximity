@@ -3,6 +3,10 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import AppLayout from "./components/layout/AppLayout";
 import ProximityControlCenter from "./pages/ProximityControlCenter";
+import ProximityDevices from "./pages/ProximityDevices";
+import ProximityDiagnostics from "./pages/ProximityDiagnostics";
+import ProximityFirmware from "./pages/ProximityFirmware";
+import ProximityAnalytics from "./pages/ProximityAnalytics";
 import Customers from "./pages/Customers";
 import CustomerCareDashboard from "./pages/CustomerCareDashboard";
 import SuspendedPortal from "./pages/SuspendedPortal";
@@ -66,10 +70,10 @@ export default function App() {
           <Route path="procedure-executions" element={<ProcedureExecutionCenter />} />
           <Route path="procedures/executions" element={<Navigate to="/procedure-executions" replace />} />
 
-          <Route path="devices" element={<ModulePlaceholder title="Devices" description="Il modulo Devices verrà collegato alla nuova architettura di prodotto nella milestone Operations Consolidation. La route è già ufficiale e non è più orfana." />} />
-          <Route path="firmware" element={<ModulePlaceholder title="Firmware" description="Catalogo firmware, campagne e upgrade job verranno migrati nel nuovo Design System mantenendo le API esistenti." />} />
-          <Route path="diagnostics" element={<ModulePlaceholder title="Diagnostics" description="La diagnostica verrà consolidata nella nuova esperienza Operations senza perdere le funzionalità già disponibili." />} />
-          <Route path="analytics" element={<ModulePlaceholder title="Analytics" description="Analytics diventerà la vista aggregata di Automation, dispositivi, firmware e customer experience." />} />
+          <Route path="devices" element={<ProximityDevices />} />
+          <Route path="firmware" element={<ProximityFirmware />} />
+          <Route path="diagnostics" element={<ProximityDiagnostics />} />
+          <Route path="analytics" element={<ProximityAnalytics />} />
           <Route path="administration" element={<ModulePlaceholder title="Administration" description="Configurazioni di piattaforma, runtime e integrazioni verranno raccolte in questa area amministrativa." />} />
           <Route path="settings" element={<Navigate to="/administration" replace />} />
         </Route>

@@ -1,0 +1,554 @@
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  KpiCard,
+  KpiGrid,
+  PrimaryActionButton,
+  SecondaryActionButton,
+  WorkspaceHeader,
+  WorkspaceLayout,
+  WorkspaceSection,
+  WorkspaceTabs,
+  WorkspaceToolbar,
+} from "../components/proximity";
+import ProximityActionIcon from "../components/icons/ProximityActionIcon";
+import { getProximityIconConfig } from "../components/icons/proximityIconRegistry";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardContent,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  FormControlLabel,
+  InputLabel,
+  LinearProgress,
+  MenuItem,
+  Select,
+  Stack,
+  Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Typography,
+} from "@mui/material";
+
+const API_BASE = "";
+
+const FirmwareIcon = getProximityIconConfig("FIRMWARE").icon;
+const DevicesIcon = getProximityIconConfig("ROUTER").icon;
+const UpgradeIcon = getProximityIconConfig("WORKFLOW").icon;
+const FailureIcon = getProximityIconConfig("DIAGNOSTICS").icon;
+
+const emptyFirmwareForm = {
+  vendor: "TP-Link",
+  model: "XC220-G3v",
+  version: "",
+  filename: "",
+  stable: true,
+  mandatory: false,
+  notes: "",
+};
+
+const safeText = (value, fallback = "N/D") => {
+  if (value === null || value === undefined || value === "") return fallback;
+  if (typeof value === "object") {
+    if (value._value !== undefined && value._value !== null) return String(value._value);
+    return fallback;
+  }
+  return String(value);
+};
+
+const formatDate = (value) => {
+  if (!value) return "N/D";
+  try {
+    return new Date(value).toLocaleString("it-IT", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return String(value);
+  }
+};
+
+const formatFileSize = (value) => {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "N/D";
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+};
+
+const SectionTitle = ({ title, subtitle, action }) => (
+  <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={2} sx={{ mb: 2 }}>
+    <Box>
+      <Typography variant="h5" fontWeight={900} sx={{ letterSpacing: -0.4 }}>
+        {title}
+      </Typography>
+      {subtitle && (
+        <Typography variant="body2" sx={{ color: "#64748b", mt: 0.5 }}>
+          {subtitle}
+        </Typography>
+      )}
+    </Box>
+    {action}
+  </Stack>
+);
+
+const SoftCard = ({ children, sx }) => (
+  <Card
+    elevation={0}
+    sx={{
+      borderRadius: 5,
+      border: "1px solid rgba(15,23,42,0.08)",
+      background: "rgba(255,255,255,0.88)",
+      boxShadow: "0 24px 80px rgba(15,23,42,0.08)",
+      backdropFilter: "blur(18px)",
+      ...sx,
+    }}
+  >
+    {children}
+  </Card>
+);
+
+export default function ProximityFirmware() {
+  const [activeView, setActiveView] = useState("repository");
+  const [firmwareCatalog, setFirmwareCatalog] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [devices, setDevices] = useState([]);
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState([]);
+  const [pageLoading, setPageLoading] = useState(true);
+
+  const [firmwareUploadOpen, setFirmwareUploadOpen] = useState(false);
+  const [firmwareForm, setFirmwareForm] = useState(emptyFirmwareForm);
+  const [firmwareFile, setFirmwareFile] = useState(null);
+  const [firmwareUploadLoading, setFirmwareUploadLoading] = useState(false);
+
+  const [firmwareDeleteTarget, setFirmwareDeleteTarget] = useState(null);
+  const [firmwareDeleteLoading, setFirmwareDeleteLoading] = useState(false);
+
+  const [massUpgradeOpen, setMassUpgradeOpen] = useState(false);
+  const [massFirmwareId, setMassFirmwareId] = useState("");
+  const [massUpgradeLoading, setMassUpgradeLoading] = useState(false);
+  const [lastMassResult, setLastMassResult] = useState(null);
+
+  const loadFirmwareCatalog = async () => {
+    const res = await fetch(`${API_BASE}/api/v1/firmware/catalog`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.detail || "Errore caricamento catalogo firmware");
+    const items = data.items || [];
+    setFirmwareCatalog(items);
+    setMassFirmwareId((current) => current || items[0]?.id || "");
+  };
+
+  const loadFirmwareJobs = async () => {
+    const res = await fetch(`${API_BASE}/api/v1/firmware/jobs`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.detail || "Errore caricamento job firmware");
+    setJobs(data.items || []);
+  };
+
+  const loadDevices = async () => {
+    const res = await fetch(`${API_BASE}/api/v1/devices`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.detail || "Errore caricamento dispositivi");
+    setDevices(data.items || []);
+  };
+
+  const loadAll = async () => {
+    setPageLoading(true);
+    try {
+      await Promise.all([loadFirmwareCatalog(), loadFirmwareJobs(), loadDevices()]);
+    } catch (err) {
+      console.error(err);
+      alert(err.message);
+    } finally {
+      setPageLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAll();
+  }, []);
+
+  const kpi = useMemo(() => {
+    const failed = jobs.filter((job) => job.status === "FAILED").length;
+    const running = jobs.filter((job) => !["FAILED", "COMPLETED", "SUCCESS"].includes(job.status)).length;
+    return {
+      firmware: firmwareCatalog.length,
+      devices: devices.length,
+      jobs: jobs.length,
+      running,
+      failed,
+    };
+  }, [firmwareCatalog, devices, jobs]);
+
+  const createFirmware = async () => {
+    if (!firmwareForm.vendor || !firmwareForm.model || !firmwareForm.version) {
+      alert("Compila vendor, modello e versione.");
+      return;
+    }
+    if (!firmwareFile) {
+      alert("Seleziona un file firmware.");
+      return;
+    }
+
+    try {
+      setFirmwareUploadLoading(true);
+      const formData = new FormData();
+      formData.append("vendor", firmwareForm.vendor);
+      formData.append("model", firmwareForm.model);
+      formData.append("version", firmwareForm.version);
+      formData.append("stable", String(Boolean(firmwareForm.stable)));
+      formData.append("mandatory", String(Boolean(firmwareForm.mandatory)));
+      formData.append("notes", firmwareForm.notes || "");
+      formData.append("file", firmwareFile);
+
+      const res = await fetch(`${API_BASE}/api/v1/firmware/upload`, { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data?.detail || "Errore upload firmware");
+
+      setFirmwareUploadOpen(false);
+      setFirmwareForm(emptyFirmwareForm);
+      setFirmwareFile(null);
+      await loadFirmwareCatalog();
+      alert(`Firmware caricato: ${data.filename}`);
+    } catch (err) {
+      console.error(err);
+      alert(`Errore firmware: ${err.message}`);
+    } finally {
+      setFirmwareUploadLoading(false);
+    }
+  };
+
+  const deleteFirmware = async () => {
+    if (!firmwareDeleteTarget?.id) return;
+    try {
+      setFirmwareDeleteLoading(true);
+      const res = await fetch(`${API_BASE}/api/v1/firmware/catalog/${firmwareDeleteTarget.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data?.detail || "Errore eliminazione firmware");
+      setFirmwareDeleteTarget(null);
+      await loadFirmwareCatalog();
+    } catch (err) {
+      console.error(err);
+      alert(`Errore eliminazione firmware: ${err.message}`);
+    } finally {
+      setFirmwareDeleteLoading(false);
+    }
+  };
+
+  const toggleDevice = (deviceId) => {
+    setSelectedDeviceIds((current) =>
+      current.includes(deviceId) ? current.filter((id) => id !== deviceId) : [...current, deviceId]
+    );
+  };
+
+  const runMassUpgrade = async () => {
+    if (!massFirmwareId) return alert("Seleziona un firmware");
+    if (!selectedDeviceIds.length) return alert("Seleziona almeno un dispositivo");
+
+    try {
+      setMassUpgradeLoading(true);
+      const res = await fetch(`${API_BASE}/api/v1/firmware/campaigns/mass-upgrade`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firmware_id: massFirmwareId,
+          device_ids: selectedDeviceIds,
+          created_by: "BACKOFFICE_UI",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data?.detail || "Errore upgrade massivo");
+      setLastMassResult(data);
+      await loadFirmwareJobs();
+    } catch (err) {
+      console.error(err);
+      alert(`Errore upgrade massivo: ${err.message}`);
+    } finally {
+      setMassUpgradeLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <WorkspaceLayout
+        header={
+          <WorkspaceHeader
+            iconDomain="FIRMWARE"
+            breadcrumbs={["Operations", "Firmware"]}
+            eyebrow="FIRMWARE OPERATIONS"
+            title="Firmware Workspace"
+            subtitle="Repository, campagne di rollout e job di upgrade per i dispositivi Proximity."
+            status={`${kpi.firmware} versioni`}
+            metadata={[
+              { label: "Firmware", value: kpi.firmware },
+              { label: "Device", value: kpi.devices },
+              { label: "Job", value: kpi.jobs },
+              { label: "Falliti", value: kpi.failed },
+            ]}
+            actions={
+              <WorkspaceToolbar>
+                <PrimaryActionButton startIcon={<ProximityActionIcon name="REFRESH" />} onClick={loadAll}>
+                  Aggiorna
+                </PrimaryActionButton>
+                <SecondaryActionButton startIcon={<ProximityActionIcon name="PUBLISH" />} onClick={() => setFirmwareUploadOpen(true)}>
+                  Carica firmware
+                </SecondaryActionButton>
+                <SecondaryActionButton startIcon={<ProximityActionIcon name="ADD" />} onClick={() => setMassUpgradeOpen(true)}>
+                  Nuova campagna
+                </SecondaryActionButton>
+              </WorkspaceToolbar>
+            }
+          />
+        }
+        tabs={
+          <WorkspaceTabs
+            value={activeView}
+            onChange={setActiveView}
+            items={[
+              { value: "repository", label: "Repository", status: kpi.firmware },
+              { value: "campaigns", label: "Campaigns", status: kpi.jobs },
+              { value: "targets", label: "Targets", status: selectedDeviceIds.length },
+            ]}
+          />
+        }
+      >
+        <Box sx={{ maxWidth: 1560, mx: "auto", width: "100%" }}>
+          {pageLoading && <LinearProgress sx={{ mb: 2, borderRadius: 999 }} />}
+
+          <WorkspaceSection
+            eyebrow="Operations"
+            title="Firmware control center"
+            description="Visibilità centralizzata su catalogo, target CPE, campagne e risultati di deployment."
+            sx={{ mb: 3 }}
+          >
+            <KpiGrid>
+              <KpiCard label="Repository" value={kpi.firmware} helper="Versioni disponibili" icon={FirmwareIcon} tone="info" />
+              <KpiCard label="Target CPE" value={kpi.devices} helper="Dispositivi inventariati" icon={DevicesIcon} tone="primary" />
+              <KpiCard label="Job" value={kpi.jobs} helper={`${kpi.running} in corso`} icon={UpgradeIcon} tone="neutral" />
+              <KpiCard label="Falliti" value={kpi.failed} helper="Richiedono verifica" icon={FailureIcon} tone={kpi.failed ? "error" : "success"} />
+            </KpiGrid>
+          </WorkspaceSection>
+
+          {activeView === "repository" && (
+            <SoftCard>
+              <CardContent sx={{ p: 3 }}>
+                <SectionTitle
+                  title="Firmware Repository"
+                  subtitle="Catalogo firmware, versioni supportate e pacchetti disponibili per il rollout."
+                  action={<Button variant="outlined" onClick={() => setFirmwareUploadOpen(true)} sx={{ borderRadius: 999, fontWeight: 900 }}>Carica firmware</Button>}
+                />
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2,1fr)", xl: "repeat(3,1fr)" }, gap: 2 }}>
+                  {firmwareCatalog.map((fw) => (
+                    <Card key={fw.id} elevation={0} sx={{ borderRadius: 4, border: "1px solid rgba(15,23,42,0.08)", background: "linear-gradient(180deg,#fff 0%,#f8fafc 100%)" }}>
+                      <CardContent>
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
+                          <Box>
+                            <Typography variant="h6" fontWeight={950}>{safeText(fw.vendor)} {safeText(fw.model)}</Typography>
+                            <Typography variant="h4" fontWeight={950} sx={{ mt: 1, color: "#1d4ed8" }}>{safeText(fw.version)}</Typography>
+                          </Box>
+                          <Stack spacing={0.75} alignItems="flex-end">
+                            <Chip label={fw.stable ? "Stable" : "Lab"} color={fw.stable ? "success" : "default"} sx={{ fontWeight: 900 }} />
+                            {fw.mandatory && <Chip size="small" label="Mandatory" color="warning" sx={{ fontWeight: 900 }} />}
+                          </Stack>
+                        </Stack>
+                        <Box sx={{ mt: 2, p: 1.5, borderRadius: 3, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)" }}>
+                          <Typography variant="body2" fontWeight={850} noWrap>File: {safeText(fw.filename)}</Typography>
+                          <Typography variant="body2" sx={{ color: "#64748b", mt: 0.5 }}>Size: {formatFileSize(fw.file_size)}</Typography>
+                          <Typography variant="caption" sx={{ color: "#94a3b8" }} noWrap>URL: {safeText(fw.url)}</Typography>
+                        </Box>
+                        {fw.notes && <Typography variant="body2" sx={{ color: "#64748b", mt: 1.5 }}>{fw.notes}</Typography>}
+                        <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap", gap: 1 }}>
+                          <Button variant="contained" onClick={() => { setMassFirmwareId(fw.id); setMassUpgradeOpen(true); }} sx={{ borderRadius: 999, fontWeight: 900 }}>Deploy</Button>
+                          <Button variant="outlined" color="error" onClick={() => setFirmwareDeleteTarget(fw)} sx={{ borderRadius: 999, fontWeight: 900 }}>Elimina</Button>
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  {!firmwareCatalog.length && !pageLoading && (
+                    <Alert severity="info" sx={{ gridColumn: "1/-1", borderRadius: 3 }}>Nessun firmware presente nel repository.</Alert>
+                  )}
+                </Box>
+              </CardContent>
+            </SoftCard>
+          )}
+
+          {activeView === "campaigns" && (
+            <SoftCard>
+              <CardContent sx={{ p: 0 }}>
+                <Box sx={{ p: 3, pb: 1 }}>
+                  <SectionTitle
+                    title="Campaign Manager"
+                    subtitle="Job firmware, avanzamento e storico dei task inviati a GenieACS."
+                    action={<Button variant="contained" onClick={() => setMassUpgradeOpen(true)} sx={{ borderRadius: 999, fontWeight: 900 }}>Nuova campagna</Button>}
+                  />
+                </Box>
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 950 }}>Job</TableCell>
+                        <TableCell sx={{ fontWeight: 950 }}>Device</TableCell>
+                        <TableCell sx={{ fontWeight: 950 }}>Task GenieACS</TableCell>
+                        <TableCell sx={{ fontWeight: 950 }}>Stato</TableCell>
+                        <TableCell sx={{ fontWeight: 950 }}>Creato da</TableCell>
+                        <TableCell sx={{ fontWeight: 950 }}>Data</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {jobs.map((job) => (
+                        <TableRow key={job.id} hover>
+                          <TableCell><Typography fontWeight={900}>{safeText(job.job_code)}</Typography></TableCell>
+                          <TableCell sx={{ maxWidth: 280, wordBreak: "break-word" }}>{safeText(job.acs_device_id)}</TableCell>
+                          <TableCell><Chip size="small" label={safeText(job.task_id)} sx={{ fontWeight: 800 }} /></TableCell>
+                          <TableCell><Chip size="small" label={safeText(job.status)} color={job.status === "FAILED" ? "error" : "success"} sx={{ fontWeight: 900 }} /></TableCell>
+                          <TableCell>{safeText(job.created_by)}</TableCell>
+                          <TableCell>{formatDate(job.created_at)}</TableCell>
+                        </TableRow>
+                      ))}
+                      {!jobs.length && (
+                        <TableRow><TableCell colSpan={6}><Box sx={{ p: 4, textAlign: "center" }}>Nessun job firmware presente.</Box></TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </CardContent>
+            </SoftCard>
+          )}
+
+          {activeView === "targets" && (
+            <SoftCard>
+              <CardContent sx={{ p: 3 }}>
+                <SectionTitle
+                  title="Campaign targets"
+                  subtitle="Seleziona i dispositivi che riceveranno il firmware nella prossima campagna."
+                  action={<Button variant="contained" disabled={!selectedDeviceIds.length} onClick={() => setMassUpgradeOpen(true)} sx={{ borderRadius: 999, fontWeight: 900 }}>Continua ({selectedDeviceIds.length})</Button>}
+                />
+                <TableContainer>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell padding="checkbox" />
+                        <TableCell sx={{ fontWeight: 950 }}>Device</TableCell>
+                        <TableCell sx={{ fontWeight: 950 }}>Vendor / Modello</TableCell>
+                        <TableCell sx={{ fontWeight: 950 }}>Firmware attuale</TableCell>
+                        <TableCell sx={{ fontWeight: 950 }}>Stato</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {devices.map((device) => (
+                        <TableRow key={device.id} hover selected={selectedDeviceIds.includes(device.id)}>
+                          <TableCell padding="checkbox">
+                            <input type="checkbox" checked={selectedDeviceIds.includes(device.id)} onChange={() => toggleDevice(device.id)} />
+                          </TableCell>
+                          <TableCell>
+                            <Typography fontWeight={900}>{safeText(device.device_code, safeText(device.serial_number))}</Typography>
+                            <Typography variant="caption" sx={{ color: "#64748b" }}>{safeText(device.acs_device_id)}</Typography>
+                          </TableCell>
+                          <TableCell>{safeText(device.manufacturer)} {safeText(device.model)}</TableCell>
+                          <TableCell>{safeText(device.software_version)}</TableCell>
+                          <TableCell><Chip size="small" label={device.online ? "ONLINE" : "OFFLINE"} color={device.online ? "success" : "default"} /></TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </CardContent>
+            </SoftCard>
+          )}
+        </Box>
+      </WorkspaceLayout>
+
+      <Dialog open={firmwareUploadOpen} onClose={() => setFirmwareUploadOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 950 }}>Carica firmware</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2, borderRadius: 3 }}>Il backend genera URL pubblico e record del catalogo.</Alert>
+          <Stack spacing={2}>
+            <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
+              <TextField fullWidth label="Vendor" value={firmwareForm.vendor} onChange={(e) => setFirmwareForm({ ...firmwareForm, vendor: e.target.value })} />
+              <TextField fullWidth label="Modello" value={firmwareForm.model} onChange={(e) => setFirmwareForm({ ...firmwareForm, model: e.target.value })} />
+            </Stack>
+            <TextField fullWidth label="Versione" value={firmwareForm.version} onChange={(e) => setFirmwareForm({ ...firmwareForm, version: e.target.value })} />
+            <Button variant="outlined" component="label" sx={{ borderRadius: 999, fontWeight: 900, alignSelf: "flex-start" }}>
+              Scegli file
+              <input hidden type="file" accept=".bin,.img,.trx,.chk,.zip,.tar,.gz,.fw" onChange={(e) => setFirmwareFile(e.target.files?.[0] || null)} />
+            </Button>
+            <TextField fullWidth label="File selezionato" value={firmwareFile?.name || ""} InputProps={{ readOnly: true }} />
+            <TextField fullWidth multiline rows={3} label="Note" value={firmwareForm.notes} onChange={(e) => setFirmwareForm({ ...firmwareForm, notes: e.target.value })} />
+            <Stack direction="row" spacing={2}>
+              <FormControlLabel control={<Switch checked={firmwareForm.stable} onChange={(e) => setFirmwareForm({ ...firmwareForm, stable: e.target.checked })} />} label="Stable" />
+              <FormControlLabel control={<Switch checked={firmwareForm.mandatory} onChange={(e) => setFirmwareForm({ ...firmwareForm, mandatory: e.target.checked })} />} label="Mandatory" />
+            </Stack>
+            {firmwareUploadLoading && <LinearProgress />}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button onClick={() => setFirmwareUploadOpen(false)} sx={{ borderRadius: 999, fontWeight: 900 }}>Annulla</Button>
+          <Button variant="contained" onClick={createFirmware} disabled={firmwareUploadLoading} sx={{ borderRadius: 999, fontWeight: 900 }}>Salva firmware</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(firmwareDeleteTarget)} onClose={() => setFirmwareDeleteTarget(null)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 950 }}>Elimina firmware</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2, borderRadius: 3 }}>Questa operazione elimina il record e tenta la rimozione del file dal repository.</Alert>
+          {firmwareDeleteTarget && (
+            <Box sx={{ p: 2, borderRadius: 3, background: "#f8fafc" }}>
+              <Typography fontWeight={950}>{safeText(firmwareDeleteTarget.vendor)} {safeText(firmwareDeleteTarget.model)}</Typography>
+              <Typography variant="h5" fontWeight={950} color="primary">{safeText(firmwareDeleteTarget.version)}</Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button onClick={() => setFirmwareDeleteTarget(null)} sx={{ borderRadius: 999, fontWeight: 900 }}>Annulla</Button>
+          <Button variant="contained" color="error" onClick={deleteFirmware} disabled={firmwareDeleteLoading} sx={{ borderRadius: 999, fontWeight: 900 }}>Elimina</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={massUpgradeOpen} onClose={() => setMassUpgradeOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle sx={{ fontWeight: 950 }}>Nuova campagna firmware</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2, borderRadius: 3 }}>Verranno creati task GenieACS download per i dispositivi selezionati.</Alert>
+          <Stack spacing={2}>
+            <FormControl fullWidth>
+              <InputLabel>Firmware</InputLabel>
+              <Select label="Firmware" value={massFirmwareId} onChange={(e) => setMassFirmwareId(e.target.value)}>
+                {firmwareCatalog.map((fw) => (
+                  <MenuItem key={fw.id} value={fw.id}>{fw.vendor} {fw.model} - {fw.version} - {fw.filename}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Box sx={{ p: 2, borderRadius: 3, background: "#f8fafc" }}>
+              <Typography fontWeight={900}>Device selezionati: {selectedDeviceIds.length}</Typography>
+              <Typography variant="body2" sx={{ color: "#64748b" }}>Usa la tab Targets per modificare la selezione.</Typography>
+            </Box>
+            {massUpgradeLoading && <LinearProgress />}
+            {lastMassResult && (
+              <Alert severity={lastMassResult.failed > 0 ? "warning" : "success"} sx={{ borderRadius: 3 }}>
+                Upgrade creato: {lastMassResult.created} task creati, {lastMassResult.failed} falliti.
+              </Alert>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button onClick={() => setMassUpgradeOpen(false)} sx={{ borderRadius: 999, fontWeight: 900 }}>Chiudi</Button>
+          <Button variant="contained" onClick={runMassUpgrade} disabled={massUpgradeLoading} sx={{ borderRadius: 999, fontWeight: 900 }}>Avvia upgrade</Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}

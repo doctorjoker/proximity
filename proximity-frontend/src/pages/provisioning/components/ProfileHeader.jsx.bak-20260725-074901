@@ -1,0 +1,31 @@
+import { Button, Chip } from '@mui/material'
+import AddIcon from '@mui/icons-material/Add'
+import PublishIcon from '@mui/icons-material/Publish'
+import SaveIcon from '@mui/icons-material/Save'
+import WorkspaceHeader from '../../../components/workspace/WorkspaceHeader'
+import WorkspaceToolbar from '../../../components/workspace/WorkspaceToolbar'
+
+export default function ProfileHeader({ profile, version, onMenuClick, onNew, onSave, onPublish, publishDisabled }) {
+  const title = profile?.name || profile?.profile_name || profile?.profile_code || 'Provisioning Profiles'
+  const status = version?.status || profile?.status || 'Nessun profilo selezionato'
+  const subtitle = profile
+    ? `${profile.profile_code}${version?.version ? ` • Versione ${version.version}` : ''}`
+    : 'Seleziona un profilo dalla barra laterale'
+
+  return (
+    <WorkspaceHeader
+      eyebrow="Proximity Provisioning"
+      title={title}
+      subtitle={subtitle}
+      onMenuClick={onMenuClick}
+      actions={(
+        <WorkspaceToolbar>
+          <Chip size="small" label={status} variant="outlined" />
+          <Button size="small" startIcon={<AddIcon />} onClick={onNew}>Nuovo</Button>
+          <Button size="small" startIcon={<SaveIcon />} onClick={onSave} disabled={!profile}>Salva</Button>
+          <Button size="small" variant="contained" startIcon={<PublishIcon />} onClick={onPublish} disabled={publishDisabled}>Pubblica</Button>
+        </WorkspaceToolbar>
+      )}
+    />
+  )
+}

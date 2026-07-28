@@ -2,8 +2,6 @@ import React, { useMemo, useState } from "react";
 import {
   Avatar,
   Box,
-  Button,
-  Chip,
   Stack,
   Table,
   TableBody,
@@ -16,7 +14,7 @@ import {
   Typography,
 } from "@mui/material";
 import { Groups } from "@mui/icons-material";
-import EmptyState from "../ui/EmptyState";
+import { SecondaryActionButton, StatusChip, TableEmptyState } from "../proximity";
 
 const muted = "#64748b";
 const safe = (value, fallback = "N/D") => value === null || value === undefined || value === "" ? fallback : String(value);
@@ -111,12 +109,12 @@ export default function CustomerTable({ customers, loading, onOpenCustomer }) {
                   </TableCell>
                   <TableCell sx={{ fontSize: 12.5 }}>{[customer.city, customer.province].filter(Boolean).join(" · ") || "N/D"}</TableCell>
                   <TableCell>
-                    <Chip size="small" label={devices.length ? "LINKED" : "NO CPE"} color={devices.length ? "success" : "default"} sx={{ fontWeight: 900 }} />
+                    <StatusChip status={devices.length ? "ACTIVE" : "INACTIVE"} label={devices.length ? "LINKED" : "NO CPE"} />
                   </TableCell>
                   <TableCell align="right">
-                    <Button size="small" variant="outlined" onClick={() => onOpenCustomer(customer)} sx={{ textTransform: "none", fontWeight: 900 }}>
+                    <SecondaryActionButton size="compact" onClick={() => onOpenCustomer(customer)}>
                       Customer 360
-                    </Button>
+                    </SecondaryActionButton>
                   </TableCell>
                 </TableRow>
               );
@@ -126,7 +124,7 @@ export default function CustomerTable({ customers, loading, onOpenCustomer }) {
       </TableContainer>
 
       {!loading && customers.length === 0 ? (
-        <EmptyState icon={<Groups sx={{ fontSize: 46 }} />} title="Nessun cliente trovato" description="Modifica i criteri di ricerca oppure aggiorna l'elenco." />
+        <TableEmptyState icon={<Groups sx={{ fontSize: 46 }} />} title="Nessun cliente trovato" description="Modifica i criteri di ricerca oppure aggiorna l'elenco." />
       ) : null}
 
       <TablePagination
