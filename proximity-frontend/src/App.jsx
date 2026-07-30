@@ -7,6 +7,7 @@ import ProximityDevices from "./pages/ProximityDevices";
 import ProximityDiagnostics from "./pages/ProximityDiagnostics";
 import ProximityFirmware from "./pages/ProximityFirmware";
 import ProximityAnalytics from "./pages/ProximityAnalytics";
+import ProximityExperience from "./pages/ProximityExperience";
 import Customers from "./pages/Customers";
 import CustomerCareDashboard from "./pages/CustomerCareDashboard";
 import SuspendedPortal from "./pages/SuspendedPortal";
@@ -74,6 +75,7 @@ export default function App() {
           <Route path="firmware" element={<ProximityFirmware />} />
           <Route path="diagnostics" element={<ProximityDiagnostics />} />
           <Route path="analytics" element={<ProximityAnalytics />} />
+          <Route path="experience-legacy" element={<ProximityExperience />} />
           <Route path="administration" element={<ModulePlaceholder title="Administration" description="Configurazioni di piattaforma, runtime e integrazioni verranno raccolte in questa area amministrativa." />} />
           <Route path="settings" element={<Navigate to="/administration" replace />} />
         </Route>

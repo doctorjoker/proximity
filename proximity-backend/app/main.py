@@ -1,3 +1,5 @@
+from app.modules.tr143_diagnostics.router import router as tr143_diagnostics_router
+from app.routers import device_diagnostics
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -91,6 +93,8 @@ from app.modules.procedure_runtime.router import router as procedure_runtime_rou
 from app.modules.provisioning_profiles.router import (
     router as provisioning_profiles_router,
 )
+
+from app.modules.diagnostics_history.router import router as diagnostics_history_router
 
 app = FastAPI(
     title=settings.app_name,
@@ -186,3 +190,11 @@ async def health():
         "app": settings.app_name,
         "environment": settings.environment,
     }
+
+app.include_router(device_diagnostics.router)
+
+# EUREKA27.2 - TR-143 Download Diagnostics
+app.include_router(tr143_diagnostics_router)
+
+# EUREKA28.0.0 - Diagnostics Center Foundation
+app.include_router(diagnostics_history_router)

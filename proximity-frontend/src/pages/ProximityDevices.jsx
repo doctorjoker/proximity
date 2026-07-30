@@ -12,8 +12,10 @@ import {
   WorkspaceToolbar,
 } from "../components/proximity";
 import { DevicePreviewPanel, DevicesFilters, DevicesTable } from "../components/devices";
+import Device360Drawer from "../components/device360/Device360Drawer";
 import ProximityActionIcon from "../components/icons/ProximityActionIcon";
 import { getProximityActionIcon, getProximityIconConfig } from "../components/icons/proximityIconRegistry";
+import DeviceFleetTable from "../components/devices/DeviceFleetTable";
 import {
   Alert,
   Box,
@@ -913,6 +915,27 @@ URL: ${data.url}`);
           models={models}
         />
 
+        {/* EUREKA25.3.3_DEVICE_FLEET */}
+
+
+        {activeView === "devices" && (
+
+
+          <DeviceFleetTable
+
+
+            devices={devices || []}
+
+
+            onOpenDevice={openDevice}
+
+
+          />
+
+
+        )}
+
+
         {activeView === "customers" && (
           <>
             <SectionTitle
@@ -932,7 +955,7 @@ URL: ${data.url}`);
             />
           </>
         )}
-        {(activeView === "customers" || activeView === "devices") && (
+        {activeView === "customers" && (
           <DevicesTable
             devices={pagedDevices}
             filteredCount={filteredDevices.length}
@@ -1183,186 +1206,33 @@ URL: ${data.url}`);
         </DialogActions>
       </Dialog>
 
-      <Drawer
-        anchor="right"
+      <Device360Drawer
         open={Boolean(selected)}
         onClose={closeDrawer}
-        PaperProps={{
-          sx: {
-            width: { xs: "100%", md: 680 },
-            p: 0,
-            background: "#f8fafc",
-          },
-        }}
-      >
-        {loading && (
-          <Box sx={{ p: 5 }}>
-            <CircularProgress />
-          </Box>
-        )}
-
-        {!loading && overview && (
-          <Box>
-            <Box sx={{ p: 3, background: heroGradient, color: "white" }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography variant="h5" fontWeight={950} noWrap>
-                    {safeText(firstValue(overview.customer_name, selected?.customer_name, selected?.wifi_customer?.customer_name), customerName(selected))}
-                  </Typography>
-                  <Typography sx={{ color: "rgba(255,255,255,0.78)", mt: 0.5 }} noWrap>
-                    {safeText(firstValue(overview.site_address, selected?.site_address, selected?.wifi_customer?.site_address), placeName(selected))}
-                  </Typography>
-                </Box>
-                <StatusChip status={overview.online ? "ONLINE" : "OFFLINE"} />
-              </Stack>
-
-              <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap", gap: 1 }}>
-                <Chip label={`${safeText(overview.manufacturer)} ${safeText(overview.model || overview.hardware_version)}`} sx={{ color: "white", background: "rgba(255,255,255,0.16)", fontWeight: 900 }} />
-                <Chip label={`FW ${safeText(overview.software_version)}`} sx={{ color: "white", background: "rgba(255,255,255,0.16)", fontWeight: 900 }} />
-              </Stack>
-            </Box>
-
-            <Box sx={{ p: 3 }}>
-              <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1.5, mb: 2 }}>
-                <SoftCard sx={{ boxShadow: "none" }}>
-                  <CardContent sx={{ p: 2 }}>
-                    <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 900 }}>WiFi</Typography>
-                    <Typography variant="h5" fontWeight={950}>{wifiQuality?.score ?? "N/D"}</Typography>
-                  </CardContent>
-                </SoftCard>
-                <SoftCard sx={{ boxShadow: "none" }}>
-                  <CardContent sx={{ p: 2 }}>
-                    <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 900 }}>Health</Typography>
-                    <Typography variant="h5" fontWeight={950}>{diagnostics?.health_score ?? "N/D"}</Typography>
-                  </CardContent>
-                </SoftCard>
-                <SoftCard sx={{ boxShadow: "none" }}>
-                  <CardContent sx={{ p: 2 }}>
-                    <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 900 }}>Client</Typography>
-                    <Typography variant="h5" fontWeight={950}>{clients?.active_count ?? clients?.count ?? "0"}</Typography>
-                  </CardContent>
-                </SoftCard>
-              </Box>
-
-              <SoftCard sx={{ boxShadow: "none", mb: 2 }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={950}>Azioni rapide</Typography>
-                  <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap", gap: 1 }}>
-                    <Button variant="contained" onClick={() => runWifiOptimize(overview.id)} disabled={wifiOptimizeLoading} sx={{ borderRadius: 999, fontWeight: 900 }}>
-                      {wifiOptimizeLoading ? "Ottimizzo..." : "Ottimizza WiFi"}
-                    </Button>
-                    <Button variant="outlined" onClick={() => runWifiScan(overview.id)} disabled={wifiScanLoading} sx={{ borderRadius: 999, fontWeight: 900 }}>
-                      {wifiScanLoading ? "Scan..." : "WiFi Scan"}
-                    </Button>
-                    <Button variant="outlined" onClick={() => runTask(overview.id, "refresh")} sx={{ borderRadius: 999, fontWeight: 900 }}>
-                      Refresh
-                    </Button>
-                    <Button variant="outlined" color="warning" onClick={() => runTask(overview.id, "reboot")} sx={{ borderRadius: 999, fontWeight: 900 }}>
-                      Reboot
-                    </Button>
-                    <Button variant="contained" color="secondary" onClick={() => runSingleFirmwareUpgrade(overview.id)} sx={{ borderRadius: 999, fontWeight: 900 }}>
-                      Aggiorna firmware
-                    </Button>
-                  </Stack>
-                  {(wifiScanLoading || wifiOptimizeLoading) && <LinearProgress sx={{ mt: 2, borderRadius: 999 }} />}
-                </CardContent>
-              </SoftCard>
-
-              <SoftCard sx={{ boxShadow: "none", mb: 2 }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={950}>WiFi cliente</Typography>
-                  <Stack spacing={2} sx={{ mt: 2 }}>
-                    <TextField fullWidth label="Nome rete WiFi" value={newSSID} onChange={(event) => setNewSSID(event.target.value)} />
-                    <Button variant="contained" onClick={updateSSID} sx={{ borderRadius: 999, fontWeight: 900, alignSelf: "flex-start" }}>
-                      Salva nome WiFi
-                    </Button>
-                    <Divider />
-                    <TextField fullWidth type="password" label="Nuova password WiFi" value={newWifiPassword} helperText="La password viene solo impostata via ACS, non letta dal router." onChange={(event) => setNewWifiPassword(event.target.value)} />
-                    <Button variant="contained" color="secondary" onClick={updatePassword} sx={{ borderRadius: 999, fontWeight: 900, alignSelf: "flex-start" }}>
-                      Salva password
-                    </Button>
-                  </Stack>
-                </CardContent>
-              </SoftCard>
-
-              <SoftCard sx={{ boxShadow: "none", mb: 2 }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={950}>Esperienza WiFi</Typography>
-                  {wifiQuality ? (
-                    <Box sx={{ mt: 1 }}>
-                      <Typography variant="h3" fontWeight={950} sx={{ color: getHealthTone(wifiQuality.score).fg }}>
-                        {wifiQuality.score ?? "N/D"}/100
-                      </Typography>
-                      <Typography fontWeight={900}>{wifiQuality.rating || "N/D"}</Typography>
-                      <Typography sx={{ mt: 1, fontSize: 22 }}>{"★".repeat(wifiQuality.stars || 0)}{"☆".repeat(5 - (wifiQuality.stars || 0))}</Typography>
-                      <Divider sx={{ my: 2 }} />
-                      {(wifiQuality.issues || []).slice(0, 4).map((item, index) => (
-                        <Typography key={`quality-issue-${index}`} variant="body2" sx={{ mt: 0.5 }}>• {item}</Typography>
-                      ))}
-                    </Box>
-                  ) : (
-                    <Typography sx={{ color: "#64748b" }}>Dati qualità WiFi non disponibili.</Typography>
-                  )}
-                </CardContent>
-              </SoftCard>
-
-              <SoftCard sx={{ boxShadow: "none", mb: 2 }}>
-                <CardContent>
-                  <Typography variant="h6" fontWeight={950}>Client connessi</Typography>
-                  <Typography variant="body2" sx={{ color: "#64748b", mb: 2 }}>
-                    Totali {clients?.count || 0} · attivi {clients?.active_count || 0}
-                  </Typography>
-                  <Stack spacing={1}>
-                    {(clients?.clients || []).slice(0, 10).map((client) => (
-                      <Box key={client.host_id || client.mac_address} sx={{ p: 1.5, borderRadius: 3, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)" }}>
-                        <Stack direction="row" justifyContent="space-between" spacing={1}>
-                          <Box>
-                            <Typography fontWeight={900}>{safeText(client.hostname, "Dispositivo")}</Typography>
-                            <Typography variant="caption" sx={{ color: "#64748b" }}>{safeText(client.ip_address)} · {safeText(client.mac_address)}</Typography>
-                          </Box>
-                          <Chip size="small" label={client.active ? "Active" : "Inactive"} color={client.active ? "success" : "default"} />
-                        </Stack>
-                      </Box>
-                    ))}
-                  </Stack>
-                </CardContent>
-              </SoftCard>
-
-              <Button fullWidth variant="outlined" onClick={() => setTechnicalOpen((value) => !value)} sx={{ borderRadius: 999, fontWeight: 900, mb: 2 }}>
-                {technicalOpen ? "Nascondi dettagli tecnici" : "Mostra dettagli tecnici"}
-              </Button>
-
-              {technicalOpen && (
-                <SoftCard sx={{ boxShadow: "none" }}>
-                  <CardContent>
-                    <Typography variant="h6" fontWeight={950}>Dettagli tecnici</Typography>
-                    <Stack spacing={1.2} sx={{ mt: 2 }}>
-                      <Typography><b>Seriale:</b> {safeText(overview.serial_number)}</Typography>
-                      <Typography><b>Device Code:</b> {safeText(overview.device_code)}</Typography>
-                      <Typography><b>ACS ID:</b> {safeText(overview.acs_device_id || selected?.acs_device_id)}</Typography>
-                      <Typography><b>WAN IP:</b> {safeText(overview.wan_ip)}</Typography>
-                      <Typography><b>LAN IP:</b> {safeText(overview.lan_ip)}</Typography>
-                      <Typography><b>TR Model:</b> {safeText(overview.root_data_model_version)}</Typography>
-                      <Typography><b>Connection Request:</b> {safeText(overview.connection_request_url)}</Typography>
-                      <Typography><b>Last Seen:</b> {safeText(overview.last_seen)}</Typography>
-                    </Stack>
-                    <Divider sx={{ my: 2 }} />
-                    <Typography fontWeight={950} sx={{ mb: 1 }}>Parametri ACS</Typography>
-                    <Stack spacing={1}>
-                      {parameters.slice(0, 80).map((param) => (
-                        <Box key={param.name} sx={{ p: 1, borderRadius: 2, background: "#f8fafc" }}>
-                          <Typography variant="caption" sx={{ color: "#64748b" }}>{param.name}</Typography>
-                          <Typography variant="body2" sx={{ wordBreak: "break-word" }}>{safeText(param.value)}</Typography>
-                        </Box>
-                      ))}
-                    </Stack>
-                  </CardContent>
-                </SoftCard>
-              )}
-            </Box>
-          </Box>
-        )}
-      </Drawer>
+        loading={loading}
+        selected={selected}
+        overview={overview}
+        parameters={parameters}
+        wifiQuality={wifiQuality}
+        diagnostics={diagnostics}
+        clients={clients}
+        newSSID={newSSID}
+        onSSIDChange={(event) => setNewSSID(event.target.value)}
+        newWifiPassword={newWifiPassword}
+        onWifiPasswordChange={(event) => setNewWifiPassword(event.target.value)}
+        technicalOpen={technicalOpen}
+        onToggleTechnical={() => setTechnicalOpen((value) => !value)}
+        wifiScanLoading={wifiScanLoading}
+        wifiOptimizeLoading={wifiOptimizeLoading}
+        onWifiOptimize={() => overview?.id && runWifiOptimize(overview.id)}
+        onWifiScan={() => overview?.id && runWifiScan(overview.id)}
+        onRefresh={() => overview?.id && runTask(overview.id, "refresh")}
+        onReboot={() => overview?.id && runTask(overview.id, "reboot")}
+        onFirmwareUpgrade={() => overview?.id && runSingleFirmwareUpgrade(overview.id)}
+        onUpdateSSID={updateSSID}
+        onUpdatePassword={updatePassword}
+        heroGradient={heroGradient}
+      />
     </>
   );
 }

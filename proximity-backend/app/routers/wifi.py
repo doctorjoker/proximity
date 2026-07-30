@@ -269,52 +269,109 @@ async def get_device_diagnostics(
 
     payload = device.raw_acs_payload or {}
 
-    uptime = get_param(
-        payload,
+    def first_param(*paths):
+        for path in paths:
+            value = get_param(payload, path)
+            if value is not None and value != "":
+                return value
+        return None
+
+    uptime = first_param(
         "Device.DeviceInfo.UpTime",
+        "InternetGatewayDevice.DeviceInfo.UpTime",
     )
 
-    cpu_usage = get_param(
-        payload,
+    cpu_usage = first_param(
         "Device.DeviceInfo.ProcessStatus.CPUUsage",
+        "Device.DeviceInfo.X_TP_CPUUsage",
     )
 
-    memory_free = get_param(
-        payload,
+    memory_free = first_param(
         "Device.DeviceInfo.MemoryStatus.Free",
+        "InternetGatewayDevice.DeviceInfo.MemoryStatus.Free",
     )
 
-    memory_total = get_param(
-        payload,
+    memory_total = first_param(
         "Device.DeviceInfo.MemoryStatus.Total",
+        "InternetGatewayDevice.DeviceInfo.MemoryStatus.Total",
+    )
+
+    ppp_status = first_param(
+        "Device.PPP.Interface.1.ConnectionStatus",
+        "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.1.ConnectionStatus",
+    )
+
+    ppp_interface_status = first_param(
+        "Device.PPP.Interface.1.Status",
+    )
+
+    ppp_username = first_param(
+        "Device.PPP.Interface.1.Username",
+        "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.1.Username",
+    )
+
+    ppp_local_ip = first_param(
+        "Device.PPP.Interface.1.IPCP.LocalIPAddress",
+        "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.1.ExternalIPAddress",
+    )
+
+    ppp_remote_ip = first_param(
+        "Device.PPP.Interface.1.IPCP.RemoteIPAddress",
+        "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.1.DefaultGateway",
+    )
+
+    wan_ip = first_param(
+        "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.1.ExternalIPAddress",
+        "Device.PPP.Interface.1.IPCP.LocalIPAddress",
+    )
+
+    last_connection_error = first_param(
+        "Device.PPP.Interface.1.LastConnectionError",
+        "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.1.LastConnectionError",
+    )
+
+    pppoe_service = first_param(
+        "Device.PPP.Interface.1.PPPoE.ServiceName",
+        "InternetGatewayDevice.WANDevice.1.WANConnectionDevice.4.WANPPPConnection.1.PPPoEServiceName",
+    )
+
+    pppoe_session = first_param(
+        "Device.PPP.Interface.1.PPPoE.SessionID",
     )
 
     memory_free_percent = None
     memory_used_percent = None
 
     if memory_free is not None and memory_total:
-        memory_free_percent = round(
-            (float(memory_free) / float(memory_total)) * 100,
-            2,
-        )
-        memory_used_percent = round(
-            100 - memory_free_percent,
-            2,
-        )
+        try:
+            memory_free_percent = round(
+                (float(memory_free) / float(memory_total)) * 100,
+                2,
+            )
+            memory_used_percent = round(
+                100 - memory_free_percent,
+                2,
+            )
+        except (TypeError, ValueError, ZeroDivisionError):
+            memory_free_percent = None
+            memory_used_percent = None
 
     health_score = 100
     risk_level = "LOW"
     status = "GOOD"
 
     if cpu_usage is not None:
-        cpu_value = int(cpu_usage)
+        try:
+            cpu_value = int(float(cpu_usage))
 
-        if cpu_value >= 90:
-            health_score -= 35
-        elif cpu_value >= 75:
-            health_score -= 20
-        elif cpu_value >= 60:
-            health_score -= 8
+            if cpu_value >= 90:
+                health_score -= 35
+            elif cpu_value >= 75:
+                health_score -= 20
+            elif cpu_value >= 60:
+                health_score -= 8
+        except (TypeError, ValueError):
+            pass
 
     if memory_free_percent is not None:
         if memory_free_percent < 15:
@@ -323,6 +380,16 @@ async def get_device_diagnostics(
             health_score -= 20
         elif memory_free_percent < 45:
             health_score -= 8
+
+    if ppp_status and str(ppp_status).lower() not in {"connected", "up"}:
+        health_score -= 20
+
+    if last_connection_error and str(last_connection_error).upper() not in {
+        "ERROR_NONE",
+        "NONE",
+        "NO_ERROR",
+    }:
+        health_score -= 15
 
     health_score = max(0, health_score)
 
@@ -341,12 +408,32 @@ async def get_device_diagnostics(
             "status": status,
             "risk_level": risk_level,
             "health_score": health_score,
-            "uptime_seconds": uptime,
-            "cpu_usage_percent": cpu_usage,
-            "memory_free": memory_free,
-            "memory_total": memory_total,
+            "uptime_seconds": safe_int(uptime, uptime),
+            "cpu_usage_percent": safe_int(cpu_usage, cpu_usage),
+            "memory_free": safe_int(memory_free, memory_free),
+            "memory_total": safe_int(memory_total, memory_total),
             "memory_free_percent": memory_free_percent,
             "memory_used_percent": memory_used_percent,
+            "ppp_status": ppp_status,
+            "ppp_interface_status": ppp_interface_status,
+            "ppp_username": ppp_username,
+            "wan_ip": wan_ip,
+            "ppp_local_ip": ppp_local_ip,
+            "ppp_remote_ip": ppp_remote_ip,
+            "last_connection_error": last_connection_error,
+            "pppoe_service": pppoe_service,
+            "pppoe_session": safe_int(pppoe_session, pppoe_session),
+            "ppp": {
+                "status": ppp_status,
+                "interface_status": ppp_interface_status,
+                "username": ppp_username,
+                "wan_ip": wan_ip,
+                "local_ip": ppp_local_ip,
+                "remote_ip": ppp_remote_ip,
+                "last_error": last_connection_error,
+                "service": pppoe_service,
+                "session_id": safe_int(pppoe_session, pppoe_session),
+            },
         },
     }
 
