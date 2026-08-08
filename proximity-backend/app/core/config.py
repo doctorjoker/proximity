@@ -11,6 +11,11 @@ class Settings(BaseSettings):
 
     genieacs_nbi_url: str = "http://genieacs-nbi:7557"
 
+    # EUREKA30.1.0 - ACS Auto Discovery Service
+    acs_auto_sync_enabled: bool = True
+    acs_auto_sync_interval_seconds: int = 30
+    acs_auto_sync_mode: str = "FULL"
+
     # ------------------------------------------------------------------
     # Diagnostic Server
     # ------------------------------------------------------------------

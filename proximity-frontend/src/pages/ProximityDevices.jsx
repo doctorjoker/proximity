@@ -16,6 +16,7 @@ import Device360Drawer from "../components/device360/Device360Drawer";
 import ProximityActionIcon from "../components/icons/ProximityActionIcon";
 import { getProximityActionIcon, getProximityIconConfig } from "../components/icons/proximityIconRegistry";
 import DeviceFleetTable from "../components/devices/DeviceFleetTable";
+import DeviceFleetDashboard from '../components/deviceFleet/DeviceFleetDashboard';
 import {
   Alert,
   Box,
@@ -235,6 +236,7 @@ export default function ProximityDevices() {
   const [wifiQualityHistory, setWifiQualityHistory] = useState(null);
 
   const [newSSID, setNewSSID] = useState("");
+  const [deviceWifi, setDeviceWifi] = useState(null);
   const [newWifiPassword, setNewWifiPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
@@ -430,6 +432,7 @@ export default function ProximityDevices() {
     setWifiQualityHistory(null);
     setParameters([]);
     setNewSSID("");
+    setDeviceWifi(null);
     setNewWifiPassword("");
     setTechnicalOpen(false);
 
@@ -478,6 +481,7 @@ export default function ProximityDevices() {
       setWifiNeighbors(neighborsData || null);
       setWifiQuality(qualityData || null);
       setWifiQualityHistory(qualityHistoryData || null);
+      setDeviceWifi(wifiData || null);
       setNewSSID(primaryWifi?.ssid || "");
     } catch (err) {
       console.error(err);
@@ -498,6 +502,7 @@ export default function ProximityDevices() {
     setWifiQuality(null);
     setWifiQualityHistory(null);
     setNewSSID("");
+    setDeviceWifi(null);
     setNewWifiPassword("");
     setWifiScanLoading(false);
     setWifiOptimizeLoading(false);
@@ -921,16 +926,7 @@ URL: ${data.url}`);
         {activeView === "devices" && (
 
 
-          <DeviceFleetTable
-
-
-            devices={devices || []}
-
-
-            onOpenDevice={openDevice}
-
-
-          />
+          <DeviceFleetDashboard onOpenDevice={onOpenDevice} />
 
 
         )}
@@ -1216,6 +1212,7 @@ URL: ${data.url}`);
         wifiQuality={wifiQuality}
         diagnostics={diagnostics}
         clients={clients}
+        wifi={deviceWifi}
         newSSID={newSSID}
         onSSIDChange={(event) => setNewSSID(event.target.value)}
         newWifiPassword={newWifiPassword}

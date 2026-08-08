@@ -1,3 +1,7 @@
+import asyncio
+import hashlib
+import json
+
 import httpx
 from urllib.parse import quote
 
@@ -83,13 +87,34 @@ class GenieACSClient:
 
     async def create_task(self, acs_device_id: str, task: dict):
         encoded_device_id = quote(acs_device_id, safe="")
+        task_url = f"{self.base_url}/devices/{encoded_device_id}/tasks"
+        query_params = {"connection_request": ""}
+
+        print("=" * 80, flush=True)
+        print("GENIEACS CREATE TASK", flush=True)
+        print("DEVICE:", acs_device_id, flush=True)
+        print("URL:", task_url, flush=True)
+        print("QUERY:", query_params, flush=True)
+        print("PAYLOAD:", flush=True)
+        print(json.dumps(task, indent=2, default=str), flush=True)
+        print("=" * 80, flush=True)
 
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
-                f"{self.base_url}/devices/{encoded_device_id}/tasks",
-                params={"connection_request": ""},
+                task_url,
+                params=query_params,
                 json=task,
             )
+
+            print("=" * 80, flush=True)
+            print("GENIEACS RESPONSE", flush=True)
+            print("HTTP:", response.status_code, flush=True)
+            print("HEADERS:", flush=True)
+            print(json.dumps(dict(response.headers), indent=2, default=str), flush=True)
+            print("BODY:", flush=True)
+            print(response.text, flush=True)
+            print("=" * 80, flush=True)
+
             try:
                 response.raise_for_status()
             except httpx.HTTPStatusError as exc:
@@ -111,7 +136,156 @@ class GenieACSClient:
                     "details": exc.response.text,
                 }
 
-            return response.json() if response.text else {"success": True}
+            try:
+                payload = response.json() if response.text else {}
+            except ValueError:
+                payload = {"raw": response.text}
+
+            return payload if payload else {"success": True}
+
+    @staticmethod
+    def _subtree(payload: dict, object_name: str):
+        current = payload
+        for part in object_name.rstrip(".").split("."):
+            if not isinstance(current, dict):
+                return None
+            current = current.get(part)
+            if current is None:
+                return None
+        return current
+
+    @classmethod
+    def _object_fingerprint(cls, payload: dict, object_names: list[str]) -> str:
+        selected = {
+            object_name: cls._subtree(payload or {}, object_name)
+            for object_name in object_names
+        }
+        serialized = json.dumps(
+            selected,
+            sort_keys=True,
+            default=str,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    async def refresh_object(self, acs_device_id: str, object_name: str):
+        return await self.create_task(
+            acs_device_id,
+            {
+                "name": "refreshObject",
+                "objectName": object_name.rstrip("."),
+            },
+        )
+
+    async def refresh_objects(
+        self,
+        acs_device_id: str,
+        object_names: list[str],
+        wait_seconds: int = 20,
+        poll_interval: int = 2,
+    ):
+        roots = list(dict.fromkeys(
+            object_name.rstrip(".")
+            for object_name in object_names
+            if object_name
+        ))
+        if not roots:
+            raise ValueError("At least one ACS object is required")
+
+        bounded_wait = max(0, min(int(wait_seconds), 60))
+        bounded_poll = max(1, min(int(poll_interval), 10))
+        before_payload = await self.get_device_raw(acs_device_id)
+        before_fingerprint = self._object_fingerprint(before_payload or {}, roots)
+
+        tasks = []
+        for object_name in roots:
+            try:
+                result = await self.refresh_object(acs_device_id, object_name)
+                accepted = not (
+                    isinstance(result, dict)
+                    and result.get("success") is False
+                )
+                tasks.append({
+                    "object_name": object_name,
+                    "accepted": accepted,
+                    "result": result,
+                })
+            except Exception as exc:  # noqa: BLE001
+                tasks.append({
+                    "object_name": object_name,
+                    "accepted": False,
+                    "error": str(exc),
+                })
+
+        if not any(item["accepted"] for item in tasks):
+            return {
+                "success": False,
+                "status": "TASK_REJECTED",
+                "changed": False,
+                "timed_out": False,
+                "poll_attempts": 0,
+                "object_names": roots,
+                "tasks": tasks,
+                "payload": before_payload,
+            }
+
+        if bounded_wait == 0:
+            return {
+                "success": True,
+                "status": "TASK_CREATED",
+                "changed": False,
+                "timed_out": False,
+                "poll_attempts": 0,
+                "object_names": roots,
+                "tasks": tasks,
+                "payload": before_payload,
+            }
+
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        latest_payload = before_payload
+        attempts = 0
+        changed = False
+
+        while loop.time() - started < bounded_wait:
+            attempts += 1
+            await asyncio.sleep(bounded_poll)
+            latest_payload = await self.get_device_raw(acs_device_id)
+            latest_fingerprint = self._object_fingerprint(
+                latest_payload or {},
+                roots,
+            )
+            if latest_fingerprint != before_fingerprint:
+                changed = True
+                break
+
+        return {
+            "success": True,
+            "status": "UPDATED" if changed else "TIMEOUT",
+            "changed": changed,
+            "timed_out": not changed,
+            "poll_attempts": attempts,
+            "wait_seconds": bounded_wait,
+            "object_names": roots,
+            "tasks": tasks,
+            "payload": latest_payload,
+        }
+
+    async def refresh_wifi(
+        self,
+        acs_device_id: str,
+        wait_seconds: int = 20,
+    ):
+        return await self.refresh_objects(
+            acs_device_id=acs_device_id,
+            object_names=[
+                "Device.WiFi.Radio",
+                "Device.WiFi.SSID",
+                "Device.WiFi.AccessPoint",
+            ],
+            wait_seconds=wait_seconds,
+        )
+
     async def wifi_scan(self, acs_device_id: str):
         return await self.create_task(
             acs_device_id,
@@ -146,6 +320,22 @@ class GenieACSClient:
                 return None
 
             return data[0]
+
+    async def set_wifi_credentials(
+        self,
+        acs_device_id: str,
+        parameter_values: list[list[object]],
+    ):
+        """Apply profile-resolved WiFi credentials without vendor-specific paths."""
+        if not parameter_values:
+            raise ValueError("At least one WiFi parameter value is required")
+        return await self.create_task(
+            acs_device_id,
+            {
+                "name": "setParameterValues",
+                "parameterValues": parameter_values,
+            },
+        )
 
     async def set_tplink_wifi_credentials(
         self,

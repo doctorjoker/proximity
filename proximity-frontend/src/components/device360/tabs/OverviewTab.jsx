@@ -1,173 +1,157 @@
 import React from "react";
 import {
   Box,
-  Button,
   Card,
   CardContent,
   Chip,
   Divider,
+  Grid,
   LinearProgress,
   Stack,
-  TextField,
   Typography,
 } from "@mui/material";
 
-const safeText = (value, fallback = "N/D") => {
-  if (value === null || value === undefined || value === "") return fallback;
-  if (typeof value === "object") {
-    if (value._value !== undefined && value._value !== null) return String(value._value);
-    return fallback;
+function valueOf(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== "") return value;
   }
-  return String(value);
-};
+  return "N/D";
+}
 
-const safeNumber = (value, fallback = null) => {
-  if (value === null || value === undefined || value === "") return fallback;
-  if (typeof value === "object") {
-    if (value._value !== undefined && value._value !== null) value = value._value;
-    else return fallback;
+function numberOf(...values) {
+  for (const value of values) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
   }
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
+  return null;
+}
 
-const getHealthTone = (score) => {
-  const n = safeNumber(score, null);
-  if (n === null) return { fg: "#64748b" };
-  if (n >= 80) return { fg: "#059669" };
-  if (n >= 60) return { fg: "#d97706" };
-  return { fg: "#dc2626" };
-};
-
-const SoftCard = ({ children, sx }) => (
-  <Card
-    elevation={0}
-    sx={{
-      borderRadius: 5,
-      border: "1px solid rgba(15,23,42,0.08)",
-      background: "rgba(255,255,255,0.86)",
-      boxShadow: "none",
-      backdropFilter: "blur(18px)",
-      ...sx,
-    }}
-  >
-    {children}
-  </Card>
-);
-
-export default function OverviewTab({
-  overview,
-  wifiQuality,
-  diagnostics,
-  clients,
-  newSSID,
-  onSSIDChange,
-  newWifiPassword,
-  onWifiPasswordChange,
-  wifiScanLoading,
-  wifiOptimizeLoading,
-  onWifiOptimize,
-  onWifiScan,
-  onRefresh,
-  onReboot,
-  onFirmwareUpgrade,
-  onUpdateSSID,
-  onUpdatePassword,
-}) {
+function InfoCard({ title, value, subtitle }) {
   return (
-    <Stack spacing={2}>
-      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 1.5 }}>
-        <SoftCard>
-          <CardContent sx={{ p: 2 }}>
-            <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 900 }}>WiFi</Typography>
-            <Typography variant="h5" fontWeight={950}>{wifiQuality?.score ?? "N/D"}</Typography>
-          </CardContent>
-        </SoftCard>
-        <SoftCard>
-          <CardContent sx={{ p: 2 }}>
-            <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 900 }}>Health</Typography>
-            <Typography variant="h5" fontWeight={950}>{diagnostics?.health_score ?? "N/D"}</Typography>
-          </CardContent>
-        </SoftCard>
-        <SoftCard>
-          <CardContent sx={{ p: 2 }}>
-            <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 900 }}>Client</Typography>
-            <Typography variant="h5" fontWeight={950}>{clients?.active_count ?? clients?.count ?? "0"}</Typography>
-          </CardContent>
-        </SoftCard>
+    <Card variant="outlined" sx={{ height: "100%", borderRadius: 3 }}>
+      <CardContent>
+        <Typography variant="caption" color="text.secondary" fontWeight={700}>
+          {title}
+        </Typography>
+        <Typography variant="h6" sx={{ mt: 0.5, wordBreak: "break-word" }}>
+          {valueOf(value)}
+        </Typography>
+        {subtitle ? (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {subtitle}
+          </Typography>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function MetricCard({ title, value, suffix = "%" }) {
+  const numeric = numberOf(value);
+  const safe = numeric === null ? 0 : Math.max(0, Math.min(100, numeric));
+  return (
+    <Card variant="outlined" sx={{ height: "100%", borderRadius: 3 }}>
+      <CardContent>
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Typography variant="subtitle2">{title}</Typography>
+          <Typography variant="h6">
+            {numeric === null ? "N/D" : `${numeric}${suffix}`}
+          </Typography>
+        </Stack>
+        <LinearProgress variant="determinate" value={safe} sx={{ mt: 2, height: 8, borderRadius: 99 }} />
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function OverviewTab({ selected = {}, overview = {}, diagnostics = {} }) {
+  const manufacturer = valueOf(overview.manufacturer, selected.manufacturer, selected.vendor);
+  const model = valueOf(overview.model, selected.model, selected.product_class);
+  const serial = valueOf(overview.serial_number, selected.serial_number, selected.serial);
+  const acsId = valueOf(selected.acs_device_id, selected._id, overview.acs_device_id);
+  const firmware = valueOf(
+    overview.software_version,
+    overview.firmware_version,
+    selected.software_version,
+    selected.firmware_version
+  );
+  const lastInform = valueOf(overview.last_inform, selected.last_inform, selected._lastInform);
+  const uptime = valueOf(diagnostics.uptime_human, diagnostics.uptime_seconds, overview.uptime);
+  const health = numberOf(diagnostics.health_score, overview.health_score, selected.health_score);
+  const risk = valueOf(diagnostics.risk, diagnostics.risk_level, overview.risk, selected.risk);
+  const status = valueOf(diagnostics.status, overview.status, selected.status);
+  const wanStatus = valueOf(
+    diagnostics.ppp_status,
+    diagnostics.wan_status,
+    overview.wan_status,
+    selected.wan_status
+  );
+  const wanIp = valueOf(
+    diagnostics.wan_ip,
+    diagnostics.ip_address,
+    overview.wan_ip,
+    selected.wan_ip,
+    selected.ip_address
+  );
+  const pppUser = valueOf(diagnostics.ppp_username, overview.ppp_username, selected.ppp_username);
+  const cpu = numberOf(diagnostics.cpu_percent, diagnostics.cpu, overview.cpu_percent);
+  const memoryUsed = numberOf(
+    diagnostics.memory_used_percent,
+    diagnostics.memory_percent,
+    diagnostics.memory_free_percent !== undefined
+      ? 100 - Number(diagnostics.memory_free_percent)
+      : undefined,
+    overview.memory_used_percent
+  );
+  const wifiScore = numberOf(overview.wifi_score, diagnostics.wifi_score, selected.wifi_score);
+
+  return (
+    <Stack spacing={2.5}>
+      <Box>
+        <Typography variant="h6">Riepilogo dispositivo</Typography>
+        <Typography variant="body2" color="text.secondary">
+          Stato operativo, connettività e risorse principali del CPE.
+        </Typography>
       </Box>
 
-      <SoftCard>
-        <CardContent>
-          <Typography variant="h6" fontWeight={950}>Azioni rapide</Typography>
-          <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap", gap: 1 }}>
-            <Button variant="contained" onClick={onWifiOptimize} disabled={wifiOptimizeLoading} sx={{ borderRadius: 999, fontWeight: 900 }}>
-              {wifiOptimizeLoading ? "Ottimizzo..." : "Ottimizza WiFi"}
-            </Button>
-            <Button variant="outlined" onClick={onWifiScan} disabled={wifiScanLoading} sx={{ borderRadius: 999, fontWeight: 900 }}>
-              {wifiScanLoading ? "Scan..." : "WiFi Scan"}
-            </Button>
-            <Button variant="outlined" onClick={onRefresh} sx={{ borderRadius: 999, fontWeight: 900 }}>Refresh</Button>
-            <Button variant="outlined" color="warning" onClick={onReboot} sx={{ borderRadius: 999, fontWeight: 900 }}>Reboot</Button>
-            <Button variant="contained" color="secondary" onClick={onFirmwareUpgrade} sx={{ borderRadius: 999, fontWeight: 900 }}>Aggiorna firmware</Button>
-          </Stack>
-          {(wifiScanLoading || wifiOptimizeLoading) && <LinearProgress sx={{ mt: 2, borderRadius: 999 }} />}
-        </CardContent>
-      </SoftCard>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Chip label={`Stato: ${status}`} color={String(status).toUpperCase().includes("GOOD") || String(status).toUpperCase().includes("ONLINE") ? "success" : "default"} />
+        <Chip label={`WAN: ${wanStatus}`} variant="outlined" />
+        <Chip label={`Rischio: ${risk}`} variant="outlined" />
+        <Chip label={`Firmware: ${firmware}`} variant="outlined" />
+      </Stack>
 
-      <SoftCard>
-        <CardContent>
-          <Typography variant="h6" fontWeight={950}>WiFi cliente</Typography>
-          <Stack spacing={2} sx={{ mt: 2 }}>
-            <TextField fullWidth label="Nome rete WiFi" value={newSSID} onChange={onSSIDChange} />
-            <Button variant="contained" onClick={onUpdateSSID} sx={{ borderRadius: 999, fontWeight: 900, alignSelf: "flex-start" }}>Salva nome WiFi</Button>
-            <Divider />
-            <TextField fullWidth type="password" label="Nuova password WiFi" value={newWifiPassword} helperText="La password viene solo impostata via ACS, non letta dal router." onChange={onWifiPasswordChange} />
-            <Button variant="contained" color="secondary" onClick={onUpdatePassword} sx={{ borderRadius: 999, fontWeight: 900, alignSelf: "flex-start" }}>Salva password</Button>
-          </Stack>
-        </CardContent>
-      </SoftCard>
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6} lg={3}><InfoCard title="Produttore" value={manufacturer} /></Grid>
+        <Grid item xs={12} sm={6} lg={3}><InfoCard title="Modello" value={model} /></Grid>
+        <Grid item xs={12} sm={6} lg={3}><InfoCard title="Seriale" value={serial} /></Grid>
+        <Grid item xs={12} sm={6} lg={3}><InfoCard title="ACS ID" value={acsId} /></Grid>
+      </Grid>
 
-      <SoftCard>
+      <Card variant="outlined" sx={{ borderRadius: 3 }}>
         <CardContent>
-          <Typography variant="h6" fontWeight={950}>Esperienza WiFi</Typography>
-          {wifiQuality ? (
-            <Box sx={{ mt: 1 }}>
-              <Typography variant="h3" fontWeight={950} sx={{ color: getHealthTone(wifiQuality.score).fg }}>{wifiQuality.score ?? "N/D"}/100</Typography>
-              <Typography fontWeight={900}>{wifiQuality.rating || "N/D"}</Typography>
-              <Typography sx={{ mt: 1, fontSize: 22 }}>{"★".repeat(wifiQuality.stars || 0)}{"☆".repeat(5 - (wifiQuality.stars || 0))}</Typography>
-              <Divider sx={{ my: 2 }} />
-              {(wifiQuality.issues || []).slice(0, 4).map((item, index) => (
-                <Typography key={`quality-issue-${index}`} variant="body2" sx={{ mt: 0.5 }}>• {item}</Typography>
-              ))}
-            </Box>
-          ) : (
-            <Typography sx={{ color: "#64748b" }}>Dati qualità WiFi non disponibili.</Typography>
-          )}
+          <Typography variant="subtitle1" fontWeight={700}>Connettività</Typography>
+          <Divider sx={{ my: 1.5 }} />
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={4}><InfoCard title="WAN / PPP" value={wanStatus} /></Grid>
+            <Grid item xs={12} md={4}><InfoCard title="IP WAN" value={wanIp} /></Grid>
+            <Grid item xs={12} md={4}><InfoCard title="Username PPP" value={pppUser} /></Grid>
+          </Grid>
         </CardContent>
-      </SoftCard>
+      </Card>
 
-      <SoftCard>
-        <CardContent>
-          <Typography variant="h6" fontWeight={950}>Client connessi</Typography>
-          <Typography variant="body2" sx={{ color: "#64748b", mb: 2 }}>
-            Totali {clients?.count || 0} · attivi {clients?.active_count || 0}
-          </Typography>
-          <Stack spacing={1}>
-            {(clients?.clients || []).slice(0, 10).map((client) => (
-              <Box key={client.host_id || client.mac_address} sx={{ p: 1.5, borderRadius: 3, background: "#f8fafc", border: "1px solid rgba(15,23,42,0.06)" }}>
-                <Stack direction="row" justifyContent="space-between" spacing={1}>
-                  <Box>
-                    <Typography fontWeight={900}>{safeText(client.hostname, "Dispositivo")}</Typography>
-                    <Typography variant="caption" sx={{ color: "#64748b" }}>{safeText(client.ip_address)} · {safeText(client.mac_address)}</Typography>
-                  </Box>
-                  <Chip size="small" label={client.active ? "Active" : "Inactive"} color={client.active ? "success" : "default"} />
-                </Stack>
-              </Box>
-            ))}
-          </Stack>
-        </CardContent>
-      </SoftCard>
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6} lg={3}><MetricCard title="Health" value={health} /></Grid>
+        <Grid item xs={12} sm={6} lg={3}><MetricCard title="CPU" value={cpu} /></Grid>
+        <Grid item xs={12} sm={6} lg={3}><MetricCard title="Memoria usata" value={memoryUsed} /></Grid>
+        <Grid item xs={12} sm={6} lg={3}><MetricCard title="WiFi score" value={wifiScore} /></Grid>
+      </Grid>
+
+      <Grid container spacing={2}>
+        <Grid item xs={12} md={4}><InfoCard title="Uptime" value={uptime} /></Grid>
+        <Grid item xs={12} md={4}><InfoCard title="Ultimo Inform" value={lastInform} /></Grid>
+        <Grid item xs={12} md={4}><InfoCard title="Versione firmware" value={firmware} /></Grid>
+      </Grid>
     </Stack>
   );
 }

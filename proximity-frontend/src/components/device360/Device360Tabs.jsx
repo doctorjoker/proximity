@@ -4,13 +4,14 @@ import { Tab, Tabs } from "@mui/material";
 const items = [
   { value: "overview", label: "Overview" },
   { value: "acs", label: "ACS" },
-  { value: "wifi", label: "WiFi", disabled: true },
+  { value: "wifi", label: "WiFi", },
   { value: "health", label: "Health" },
   { value: "diagnostics", label: "Diagnostics" },
-  { value: "firmware", label: "Firmware", disabled: true },
-  { value: "procedures", label: "Procedures", disabled: true },
+  { value: "firmware", label: "Firmware", },
+  { value: "procedures", label: "Procedures", },
   { value: "history", label: "History", /* EUREKA28.1.1b_HISTORY_TAB */ },
   { value: "ai", label: "AI", disabled: true },
+  { value: 'qualification', label: 'Qualification' },
 ];
 
 export default function Device360Tabs({ value, onChange }) {

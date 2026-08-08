@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.db.session import get_db
+from app.models.device import DeviceAcsIdentity
 from app.repositories.device_query_repository import (
     get_devices,
     get_device,
@@ -18,8 +19,11 @@ router = APIRouter(
 
 
 @router.get("")
-async def list_devices(db: Session = Depends(get_db)):
-    devices = get_devices(db)
+async def list_devices(
+    include_technical: bool = False,
+    db: Session = Depends(get_db),
+):
+    devices = get_devices(db, include_technical=include_technical)
 
     return {
         "success": True,
@@ -33,6 +37,13 @@ async def list_devices(db: Session = Depends(get_db)):
                 "model": d.model,
                 "software_version": d.software_version,
                 "status": d.status,
+                "presence_state": d.status,
+                "presence_age_seconds": getattr(d, "presence_age_seconds", None),
+                "inventory_kind": getattr(d, "inventory_kind", "UNQUALIFIED"),
+                "acs_identity_count": getattr(d, "acs_identity_count", 0),
+                "has_multiple_acs_identities": getattr(
+                    d, "has_multiple_acs_identities", False
+                ),
                 "online": d.online,
                 "last_seen": d.last_seen,
             }
@@ -342,4 +353,70 @@ async def device_overview(
             "service_order_code": device.service_order_code,
             "site_address": device.site_address,
         },
+    }
+
+
+@router.get("/{device_id}/acs-identities")
+async def device_acs_identities(
+    device_id: str,
+    db: Session = Depends(get_db),
+):
+    device = get_device(db, device_id)
+
+    if not device:
+        raise HTTPException(
+            status_code=404,
+            detail="Device not found",
+        )
+
+    identities = (
+        db.query(DeviceAcsIdentity)
+        .filter(DeviceAcsIdentity.device_id == device.id)
+        .order_by(
+            DeviceAcsIdentity.last_seen.desc().nullslast(),
+            DeviceAcsIdentity.acs_device_id.asc(),
+        )
+        .all()
+    )
+
+    items = []
+
+    for identity in identities:
+        product_class = identity.product_class or ""
+        normalized = product_class.strip().lower()
+
+        if normalized in {"device", "device2"}:
+            data_model = "TR-181"
+        elif normalized in {"igd", "internetgatewaydevice"}:
+            data_model = "TR-098"
+        else:
+            data_model = "UNKNOWN"
+
+        items.append(
+            {
+                "id": str(identity.id),
+                "device_id": str(identity.device_id),
+                "acs_device_id": identity.acs_device_id,
+                "serial_number": identity.serial_number,
+                "oui": identity.oui,
+                "manufacturer": identity.manufacturer,
+                "product_class": identity.product_class,
+                "data_model": data_model,
+                "software_version": identity.software_version,
+                "hardware_version": identity.hardware_version,
+                "active": identity.active,
+                "first_seen": identity.first_seen,
+                "last_seen": identity.last_seen,
+                "is_preferred": identity.acs_device_id == device.acs_device_id,
+            }
+        )
+
+    return {
+        "success": True,
+        "device_id": str(device.id),
+        "device_code": device.device_code,
+        "preferred_acs_device_id": device.acs_device_id,
+        "count": len(items),
+        "has_multiple_identities": len(items) > 1,
+        "items": items,
     }

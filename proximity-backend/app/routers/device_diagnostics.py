@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+import asyncio
 import time
 
 from fastapi import APIRouter, HTTPException
@@ -384,6 +385,80 @@ _DOWNLOAD_EXECUTIONS: dict[str, dict[str, Any]] = {}
 DOWNLOAD_REFRESH_INTERVAL_SECONDS = 3.0
 DOWNLOAD_EXECUTION_TIMEOUT_SECONDS = 180
 
+DOWNLOAD_ACTIVE_STATES = {"REQUESTED", "RUNNING"}
+DOWNLOAD_RESET_ATTEMPTS = 5
+DOWNLOAD_RESET_SETTLE_SECONDS = 1.0
+
+
+def _download_execution_is_active(execution: dict[str, Any] | None) -> bool:
+    if not execution:
+        return False
+    return str(execution.get("state") or "").upper() in DOWNLOAD_ACTIVE_STATES
+
+
+async def _reset_download_diagnostics_state(
+    acs_device_id: str,
+    object_path: str,
+) -> dict[str, Any]:
+    """Create a real None -> Requested edge before every TR-143 download."""
+    reset_task = await genieacs_client.create_task(
+        acs_device_id,
+        {
+            "name": "setParameterValues",
+            "parameterValues": [
+                [
+                    f"{object_path}.DiagnosticsState",
+                    "None",
+                    "xsd:string",
+                ],
+            ],
+        },
+    )
+
+    if isinstance(reset_task, dict) and reset_task.get("success") is False:
+        return {
+            "success": False,
+            "state": None,
+            "reset_task": reset_task,
+            "attempts": 0,
+        }
+
+    latest = None
+    for attempt in range(1, DOWNLOAD_RESET_ATTEMPTS + 1):
+        await asyncio.sleep(DOWNLOAD_RESET_SETTLE_SECONDS)
+        refresh_task = await genieacs_client.create_task(
+            acs_device_id,
+            {
+                "name": "refreshObject",
+                "objectName": object_path,
+            },
+        )
+        if isinstance(refresh_task, dict) and refresh_task.get("success") is False:
+            return {
+                "success": False,
+                "state": latest,
+                "reset_task": reset_task,
+                "refresh_task": refresh_task,
+                "attempts": attempt,
+            }
+        await asyncio.sleep(DOWNLOAD_RESET_SETTLE_SECONDS)
+        latest = _extract_download(await _read_device(acs_device_id))
+        if latest.get("state") == "IDLE":
+            return {
+                "success": True,
+                "state": latest,
+                "reset_task": reset_task,
+                "attempts": attempt,
+            }
+
+    return {
+        "success": False,
+        "state": latest,
+        "reset_task": reset_task,
+        "attempts": DOWNLOAD_RESET_ATTEMPTS,
+    }
+
+
 
 def _to_datetime(value: Any) -> datetime | None:
     if value in (None, "", "0001-01-01T00:00:00Z", "1970-01-01T00:00:00.000Z"):
@@ -535,11 +610,29 @@ async def get_download_capability(acs_device_id: str):
 
 
 @router.post("/{acs_device_id}/diagnostics/download")
-async def start_download_diagnostics(acs_device_id: str, payload: DownloadDiagnosticsRequest):
+async def start_download_diagnostics(
+    acs_device_id: str,
+    payload: DownloadDiagnosticsRequest,
+):
+    existing = _DOWNLOAD_EXECUTIONS.get(acs_device_id)
+    if _download_execution_is_active(existing):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "TR143_DOWNLOAD_ALREADY_RUNNING",
+                "message": "A TR-143 download is already active for this device.",
+                "execution_id": existing.get("execution_id"),
+                "phase": existing.get("phase"),
+            },
+        )
+
     device = await _read_device(acs_device_id)
     current = _extract_download(device)
     if not current["supported"]:
-        raise HTTPException(status_code=409, detail="Device does not expose TR-143 DownloadDiagnostics")
+        raise HTTPException(
+            status_code=409,
+            detail="Device does not expose TR-143 DownloadDiagnostics",
+        )
 
     object_path = current["object_path"]
     execution_id = f"DOWNLOAD-{int(time.time() * 1000)}"
@@ -552,13 +645,52 @@ async def start_download_diagnostics(acs_device_id: str, payload: DownloadDiagno
         "last_refresh_at": 0.0,
         "refresh_attempts": 0,
         "state": "REQUESTED",
-        "phase": "REQUEST",
-        "progress": 8,
+        "phase": "RESET",
+        "progress": 4,
         "events": [],
         "last_event_phase": None,
     }
-    _append_event(execution, "Speed test avviato", "Preparazione della diagnostica download TR-143.", "info", "REQUEST")
+
     _DOWNLOAD_EXECUTIONS[acs_device_id] = execution
+    _append_event(
+        execution,
+        "Reset TR-143",
+        "Ripristino DiagnosticsState=None prima della nuova esecuzione.",
+        "info",
+        "RESET",
+    )
+    _persist_download_history_safe(acs_device_id, execution, current)
+
+    reset = await _reset_download_diagnostics_state(acs_device_id, object_path)
+    if not reset.get("success"):
+        latest = reset.get("state") or current
+        execution.update(state="ERROR", phase="RESET_ERROR", progress=100)
+        _append_event(
+            execution,
+            "Reset TR-143 fallito",
+            "Il CPE non ha confermato DiagnosticsState=None.",
+            "error",
+            "RESET_ERROR",
+        )
+        _persist_download_history_safe(acs_device_id, execution, latest)
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "TR143_RESET_FAILED",
+                "message": "Unable to reset DownloadDiagnostics to None.",
+                "reset": reset,
+            },
+        )
+
+    current = reset.get("state") or current
+    execution.update(state="REQUESTED", phase="CONFIGURE", progress=10)
+    _append_event(
+        execution,
+        "TR-143 pronto",
+        "DiagnosticsState=None confermato; configurazione del download.",
+        "success",
+        "CONFIGURE",
+    )
     _persist_download_history_safe(acs_device_id, execution, current)
 
     parameter_values = [
@@ -566,6 +698,8 @@ async def start_download_diagnostics(acs_device_id: str, payload: DownloadDiagno
         [f"{object_path}.DSCP", payload.dscp, "xsd:unsignedInt"],
         [f"{object_path}.EthernetPriority", payload.ethernet_priority, "xsd:unsignedInt"],
     ]
+    if current.get("object_path") == "InternetGatewayDevice.DownloadDiagnostics":
+        parameter_values.append([f"{object_path}.NumberOfConnections", 1, "xsd:unsignedInt"])
     if payload.interface:
         parameter_values.append([f"{object_path}.Interface", payload.interface, "xsd:string"])
     parameter_values.append([f"{object_path}.DiagnosticsState", "Requested", "xsd:string"])
@@ -581,13 +715,20 @@ async def start_download_diagnostics(acs_device_id: str, payload: DownloadDiagno
         raise HTTPException(status_code=502, detail=result)
 
     execution.update(state="RUNNING", phase="GENIEACS", progress=24)
-    _append_event(execution, "Task ACS creato", "GenieACS ha accettato la diagnostica download.", "success", "GENIEACS")
+    _append_event(
+        execution,
+        "Task ACS creato",
+        "GenieACS ha accettato la diagnostica dopo il reset idempotente None -> Requested.",
+        "success",
+        "GENIEACS",
+    )
     _persist_download_history_safe(acs_device_id, execution, current)
     return {
         "success": True,
         "acs_device_id": acs_device_id,
         "state": "RUNNING",
         "download_url": payload.url,
+        "reset": {"success": True, "attempts": reset.get("attempts", 0)},
         "task": result,
         **_public_download_execution(execution),
     }
@@ -598,6 +739,40 @@ async def poll_download_status(acs_device_id: str):
     device = await _read_device(acs_device_id)
     current = _extract_download(device)
     execution = _DOWNLOAD_EXECUTIONS.get(acs_device_id)
+
+    if execution:
+        trace_snapshot = {
+            "raw_state": current.get("raw_state"),
+            "state": current.get("state"),
+            "download_url": current.get("download_url"),
+            "test_bytes_received": current.get("test_bytes_received"),
+            "total_bytes_received": current.get("total_bytes_received"),
+            "rom_time": current.get("rom_time"),
+            "bom_time": current.get("bom_time"),
+            "eom_time": current.get("eom_time"),
+            "tcp_open_request_time": current.get("tcp_open_request_time"),
+            "tcp_open_response_time": current.get("tcp_open_response_time"),
+            "duration_ms": current.get("duration_ms"),
+            "throughput_mbps": current.get("throughput_mbps"),
+            "observed_at": current.get("observed_at"),
+        }
+
+        if trace_snapshot != execution.get("_last_trace_snapshot"):
+            execution["_last_trace_snapshot"] = trace_snapshot
+
+            print(
+                "[TR143-TRACE]",
+                {
+                    "acs_device_id": acs_device_id,
+                    "execution_id": execution.get("execution_id"),
+                    "execution_state": execution.get("state"),
+                    "phase": execution.get("phase"),
+                    "refresh_attempts": execution.get("refresh_attempts"),
+                    "requested_url": execution.get("url"),
+                    **trace_snapshot,
+                },
+                flush=True,
+            )
 
     if not execution:
         return {"acs_device_id": acs_device_id, **current, **_public_download_execution(None)}

@@ -1,12 +1,16 @@
+from contextlib import asynccontextmanager
 from app.modules.tr143_diagnostics.router import router as tr143_diagnostics_router
 from app.routers import device_diagnostics
+from app.modules.cpe_profiles.router import router as cpe_profiles_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.services.acs_auto_sync import acs_auto_sync_service
 from app.routers.acs import router as acs_router
 
 from app.routers.discovery import router as discovery_router
+from app.routers.acs_auto_sync import router as acs_auto_sync_router
 
 from app.routers.devices import router as devices_router
 
@@ -95,11 +99,30 @@ from app.modules.provisioning_profiles.router import (
 )
 
 from app.modules.diagnostics_history.router import router as diagnostics_history_router
+from app.modules.client_intelligence.router import router as client_intelligence_router
+from app.routers.device_acs_identities import router as device_acs_identities_router
+from app.modules.device_diagnostics.router import router as device_diagnostics_router
+from app.modules.cpe_capabilities.router import router as cpe_capabilities_router
+from app.modules.diagnostic_servers.router import router as diagnostic_servers_router
+from app.modules.tr143_qualification.router import router as tr143_qualification_router
+
+@asynccontextmanager
+async def proximity_lifespan(app: FastAPI):
+    await acs_auto_sync_service.start()
+    try:
+        yield
+    finally:
+        await acs_auto_sync_service.stop()
+
 
 app = FastAPI(
     title=settings.app_name,
     version="6.0.0-foundation",
+    lifespan=proximity_lifespan,
 )
+
+app.include_router(tr143_qualification_router)
+app.include_router(diagnostic_servers_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -109,9 +132,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(cpe_capabilities_router)
 app.include_router(acs_router)
 
+app.include_router(device_acs_identities_router)
+
 app.include_router(discovery_router)
+app.include_router(acs_auto_sync_router)
 
 app.include_router(devices_router)
 
@@ -183,6 +210,8 @@ app.include_router(procedure_runtime_router)
 
 app.include_router(provisioning_profiles_router)
 
+app.include_router(cpe_profiles_router)
+
 @app.get("/health")
 async def health():
     return {
@@ -198,3 +227,8 @@ app.include_router(tr143_diagnostics_router)
 
 # EUREKA28.0.0 - Diagnostics Center Foundation
 app.include_router(diagnostics_history_router)
+
+app.include_router(client_intelligence_router)
+
+# EUREKA32.0.0_DEVICE_DIAGNOSTICS_ENGINE
+app.include_router(device_diagnostics_router)

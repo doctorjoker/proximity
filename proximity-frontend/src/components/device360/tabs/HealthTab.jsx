@@ -1,287 +1,258 @@
-import React from "react";
-import HealthPppSection from "./HealthPppSection";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  Box, Card, CardContent, Chip, Divider, LinearProgress, Stack, Typography,
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Divider,
+  LinearProgress,
+  Paper,
+  Stack,
+  Typography,
 } from "@mui/material";
+import {
+  IconActivityHeartbeat,
+  IconAlertTriangle,
+  IconClock,
+  IconCpu,
+  IconDatabase,
+  IconPlugConnected,
+  IconRefresh,
+  IconServer,
+} from "@tabler/icons-react";
 
-const numberValue = (value) => {
-  if (value === null || value === undefined || value === "") return null;
-  const raw = typeof value === "object" ? value?._value : value;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : null;
+const formatDuration = (seconds) => {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value < 0) return "N/D";
+  const days = Math.floor(value / 86400);
+  const hours = Math.floor((value % 86400) / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  const secs = Math.floor(value % 60);
+  if (days > 0) return `${days}g ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${secs}s`;
+  return `${secs}s`;
 };
 
-const textValue = (value, fallback = "N/D") => {
-  if (value === null || value === undefined || value === "") return fallback;
-  if (typeof value === "object") return value?._value ?? fallback;
-  return String(value);
+const ageLabel = (seconds) => {
+  if (seconds === null || seconds === undefined) return "";
+  return `rilevato ${formatDuration(seconds)} fa`;
 };
 
-const firstNumber = (...values) => {
-  for (const value of values) {
-    const parsed = numberValue(value);
-    if (parsed !== null) return parsed;
+const metricLabel = (metric, formatter = (value) => String(value)) => {
+  if (!metric) return { value: "N/D", helper: "Metrica non disponibile", tone: "default" };
+  if (metric.status === "UNSUPPORTED") {
+    return { value: "Non supportato", helper: metric.reason || "Non esposto dal firmware", tone: "default" };
   }
-  return null;
-};
-
-const firstText = (...values) => {
-  for (const value of values) {
-    if (value !== null && value !== undefined && value !== "") {
-      return textValue(value);
-    }
+  if (metric.status === "NOT_DISCOVERED") {
+    return { value: "Non rilevato", helper: metric.reason || "Parametro non trovato", tone: "warning" };
   }
-  return "N/D";
+  if (metric.status === "STALE") {
+    const lastValue =
+      metric.value !== null && metric.value !== undefined
+        ? formatter(metric.value)
+        : null;
+
+    return {
+      value: "Dato obsoleto",
+      helper: lastValue
+        ? `Ultimo valore: ${lastValue} · ${ageLabel(metric.age_seconds)}`
+        : ageLabel(metric.age_seconds),
+      tone: "warning",
+    };
+  }
+  return {
+    value: metric.value !== null && metric.value !== undefined ? formatter(metric.value) : "N/D",
+    helper: ageLabel(metric.age_seconds) || "Dato corrente",
+    tone: "success",
+  };
 };
 
-const clamp = (value) => Math.max(0, Math.min(100, numberValue(value) ?? 0));
-
-const scoreStyle = (score) => {
-  if (score === null) return { label: "Da verificare", color: "#64748b", bg: "rgba(100,116,139,.10)" };
-  if (score >= 85) return { label: "Excellent", color: "#059669", bg: "rgba(5,150,105,.10)" };
-  if (score >= 70) return { label: "Good", color: "#2563eb", bg: "rgba(37,99,235,.10)" };
-  if (score >= 50) return { label: "Attention", color: "#d97706", bg: "rgba(217,119,6,.10)" };
-  return { label: "Critical", color: "#dc2626", bg: "rgba(220,38,38,.10)" };
-};
-
-const riskColor = (risk) => {
-  const value = textValue(risk, "UNKNOWN").toUpperCase();
-  if (["LOW", "BASSO"].includes(value)) return "success";
-  if (["MEDIUM", "MEDIO"].includes(value)) return "warning";
-  if (["HIGH", "ALTO", "CRITICAL", "CRITICO"].includes(value)) return "error";
-  return "default";
-};
-
-const uptimeLabel = (value) => {
-  const seconds = numberValue(value);
-  if (seconds === null) return textValue(value);
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (days) return `${days}g ${hours}h`;
-  if (hours) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-};
-
-const SoftCard = ({ children, sx }) => (
-  <Card elevation={0} sx={{
-    borderRadius: 5,
-    border: "1px solid rgba(15,23,42,.08)",
-    background: "rgba(255,255,255,.90)",
-    boxShadow: "none",
-    ...sx,
-  }}>
-    {children}
-  </Card>
-);
-
-const Metric = ({ label, value, progress, helper }) => (
-  <SoftCard>
-    <CardContent sx={{ p: 2.25 }}>
-      <Typography variant="caption" sx={{ color: "#64748b", fontWeight: 900 }}>{label}</Typography>
-      <Typography variant="h5" fontWeight={950} sx={{ mt: .5 }}>{value}</Typography>
-      {helper && <Typography variant="body2" sx={{ color: "#64748b", mt: .5 }}>{helper}</Typography>}
-      {progress !== null && progress !== undefined && (
-        <LinearProgress variant="determinate" value={clamp(progress)} sx={{ mt: 1.5, height: 7, borderRadius: 999 }} />
-      )}
-    </CardContent>
-  </SoftCard>
-);
-
-const Finding = ({ item }) => {
-  const severity = textValue(item?.severity || item?.level || item?.type, "INFO").toUpperCase();
-  const critical = ["ERROR", "CRITICAL", "HIGH"].includes(severity);
-  const warning = ["WARNING", "WARN", "MEDIUM"].includes(severity);
-  const marker = critical ? "X" : warning ? "!" : "OK";
-  const color = critical ? "#dc2626" : warning ? "#d97706" : "#059669";
-
+function MetricCard({ icon: Icon, label, value, helper, progress, tone = "default" }) {
+  const palette = {
+    success: { bg: "#ecfdf5", border: "#bbf7d0", fg: "#047857" },
+    warning: { bg: "#fff7ed", border: "#fed7aa", fg: "#c2410c" },
+    error: { bg: "#fef2f2", border: "#fecaca", fg: "#b91c1c" },
+    info: { bg: "#eff6ff", border: "#bfdbfe", fg: "#1d4ed8" },
+    default: { bg: "#ffffff", border: "#e2e8f0", fg: "#475569" },
+  };
+  const current = palette[tone] || palette.default;
   return (
-    <Box sx={{ p: 1.5, borderRadius: 3, background: "#f8fafc", border: "1px solid rgba(15,23,42,.06)" }}>
-      <Stack direction="row" spacing={1.25} alignItems="flex-start">
-        <Typography fontWeight={950} sx={{ color }}>{marker}</Typography>
-        <Box>
-          <Typography fontWeight={900}>{textValue(item?.title || item?.name || item?.message, "Finding")}</Typography>
-          {(item?.description || item?.detail) && (
-            <Typography variant="body2" sx={{ color: "#64748b", mt: .25 }}>
-              {textValue(item.description || item.detail)}
-            </Typography>
-          )}
+    <Paper variant="outlined" sx={{ p: 1.75, bgcolor: current.bg, borderColor: current.border, minWidth: 0 }}>
+      <Stack direction="row" spacing={1.2} alignItems="flex-start">
+        <Box sx={{ width: 36, height: 36, borderRadius: 1.5, display: "grid", placeItems: "center", bgcolor: "#fff", color: current.fg, flexShrink: 0 }}>
+          <Icon size={19} />
+        </Box>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 900, textTransform: "uppercase", letterSpacing: .35 }}>
+            {label}
+          </Typography>
+          <Typography variant="h6" sx={{ fontWeight: 950, color: current.fg, lineHeight: 1.15, overflowWrap: "anywhere" }}>
+            {value}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">{helper}</Typography>
+          {progress !== null && progress !== undefined ? (
+            <LinearProgress variant="determinate" value={Math.max(0, Math.min(100, progress))} sx={{ mt: 1, height: 6, borderRadius: 4 }} />
+          ) : null}
         </Box>
       </Stack>
-    </Box>
+    </Paper>
   );
-};
+}
 
-export default function HealthTab({ overview, diagnostics, wifiQuality, clients }) {
-  const score = firstNumber(
-    diagnostics?.health_score,
-    diagnostics?.score,
-    overview?.health_score,
-    wifiQuality?.health_score
+function StatusRow({ label, value, state = "default" }) {
+  return (
+    <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2} sx={{ py: .9 }}>
+      <Typography variant="body2" color="text.secondary">{label}</Typography>
+      <Chip size="small" label={value} color={state} variant={state === "default" ? "outlined" : "filled"} sx={{ fontWeight: 850 }} />
+    </Stack>
   );
-  const riskLevel =
-    diagnostics?.risk_level ??
-    diagnostics?.riskLevel ??
-    overview?.risk_level ??
-    overview?.riskLevel ??
-    "N/D";
-  const cpu = firstNumber(
-    diagnostics?.cpu_usage_percent,
-    diagnostics?.cpu_usage,
-    diagnostics?.cpu_percent,
-    overview?.cpu_usage_percent,
-    overview?.cpu_usage
-  );
-  const memory = firstNumber(
-    diagnostics?.memory_used_percent,
-    diagnostics?.memory_usage_percent,
-    diagnostics?.memory_usage,
-    diagnostics?.memory_percent,
-    overview?.memory_used_percent,
-    overview?.memory_usage
-  );
-  const flash = firstNumber(diagnostics?.flash_usage, diagnostics?.storage_usage, overview?.flash_usage);
-  const uptime = diagnostics?.uptime_seconds ?? diagnostics?.uptime ?? overview?.uptime_seconds ?? overview?.uptime;
-  const latency = firstNumber(diagnostics?.latency_ms, diagnostics?.wan_latency_ms, diagnostics?.ping_ms);
-  const packetLoss = firstNumber(diagnostics?.packet_loss, diagnostics?.packet_loss_percent);
-  const reconnects = firstNumber(diagnostics?.reconnect_count, diagnostics?.wan_reconnects, diagnostics?.disconnect_count);
+}
 
-  const pppStatus = firstText(
-    diagnostics?.ppp?.status,
-    diagnostics?.ppp_status,
-    diagnostics?.pppoe_status,
-    diagnostics?.wan_connection_status,
-    overview?.pppoe_status
-  );
-  const pppInterfaceStatus = firstText(
-    diagnostics?.ppp?.interface_status,
-    diagnostics?.ppp_interface_status
-  );
-  const wanIp = firstText(
-    diagnostics?.ppp?.wan_ip,
-    diagnostics?.wan_ip,
-    diagnostics?.ppp?.local_ip,
-    diagnostics?.ppp_local_ip
-  );
-  const pppLastError = firstText(
-    diagnostics?.ppp?.last_error,
-    diagnostics?.last_connection_error
-  );
+export default function HealthTab({ device, deviceId }) {
+  const resolvedDeviceId = deviceId || device?.id || device?.device_id;
+  const [telemetry, setTelemetry] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
 
-  const findings = Array.isArray(diagnostics?.findings)
-    ? diagnostics.findings
-    : Array.isArray(diagnostics?.issues)
-      ? diagnostics.issues.map((message) => ({ severity: "warning", title: textValue(message) }))
-      : [];
+  const load = useCallback(async () => {
+    if (!resolvedDeviceId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/v1/cpe-profiles/devices/${encodeURIComponent(resolvedDeviceId)}/telemetry`, {
+        credentials: "same-origin",
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.detail || `HTTP ${response.status}`);
+      setTelemetry(body);
+    } catch (exc) {
+      setError(exc?.message || "Impossibile caricare la telemetria del Device Driver");
+    } finally {
+      setLoading(false);
+    }
+  }, [resolvedDeviceId]);
 
-  const recommendations = Array.isArray(diagnostics?.recommendations)
-    ? diagnostics.recommendations
-    : Array.isArray(wifiQuality?.recommendations)
-      ? wifiQuality.recommendations
-      : [];
+  const refreshRuntime = useCallback(async () => {
+    if (!resolvedDeviceId) return;
+    setRefreshing(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/v1/cpe-profiles/devices/${encodeURIComponent(resolvedDeviceId)}/telemetry/refresh`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.detail || `HTTP ${response.status}`);
+      setTelemetry(body.telemetry || body);
+    } catch (exc) {
+      setError(exc?.message || "Refresh runtime fallito");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [resolvedDeviceId]);
 
-  const tone = scoreStyle(score);
+  useEffect(() => { load(); }, [load]);
+
+  const metrics = telemetry?.metrics || {};
+  const health = telemetry?.health || {};
+  const systemUptime = metricLabel(metrics["system.uptime_seconds"], formatDuration);
+  const cpu = metricLabel(metrics["system.cpu_usage_percent"], (v) => `${Math.round(Number(v))}%`);
+  const memory = metricLabel(metrics["system.memory_used_percent"], (v) => `${Math.round(Number(v))}%`);
+  const pppStatus = metricLabel(metrics["wan.ppp.status"]);
+  const pppUptime = metricLabel(metrics["wan.ppp.uptime_seconds"], formatDuration);
+
+  const insights = useMemo(() => {
+    if (!telemetry) return [];
+    const items = [];
+    if (health.status === "GOOD") {
+      items.push({ severity: "success", text: `Stato generale GOOD con confidenza ${health.confidence || "N/D"}.` });
+    }
+    if (metrics["system.cpu_usage_percent"]?.status === "UNSUPPORTED") {
+      items.push({ severity: "info", text: "La CPU non è esposta dal firmware qualificato e non penalizza l'Health score." });
+    }
+    if (metrics["system.memory_used_percent"]?.status === "UNSUPPORTED") {
+      items.push({ severity: "info", text: "La memoria non è esposta dal firmware qualificato e non penalizza l'Health score." });
+    }
+    if (metrics["system.uptime_seconds"]?.status === "STALE") {
+      items.push({ severity: "warning", text: "L'uptime CPE è obsoleto: eseguire un refresh runtime prima di interpretarlo." });
+    }
+    if (metrics["wan.ppp.status"]?.status === "STALE") {
+      items.push({ severity: "warning", text: "Lo stato PPP non è abbastanza recente per essere considerato affidabile." });
+    }
+    return items;
+  }, [telemetry, health, metrics]);
+
+  if (loading && !telemetry) {
+    return <Box sx={{ minHeight: 280, display: "grid", placeItems: "center" }}><CircularProgress /></Box>;
+  }
 
   return (
-    <Stack spacing={2}>
-      <SoftCard sx={{ background: tone.bg }}>
-        <CardContent sx={{ p: 3 }}>
-          <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", md: "center" }} spacing={2}>
-            <Box>
-              <Typography variant="overline" sx={{ color: "#64748b", fontWeight: 950 }}>Device Assurance</Typography>
-              <Stack direction="row" alignItems="baseline" spacing={1}>
-                <Typography variant="h2" fontWeight={950} sx={{ color: tone.color }}>{score ?? "N/D"}</Typography>
-                <Typography variant="h6" sx={{ color: "#64748b" }}>/100</Typography>
-              </Stack>
-              <Typography fontWeight={900} sx={{ color: tone.color }}>{tone.label}</Typography>
-            </Box>
-            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-              <Chip label={`Risk ${riskLevel}`} color={riskColor(riskLevel)} sx={{ fontWeight: 900 }} />
-              <Chip label={overview?.online ? "Healthy online" : "Offline"} color={overview?.online ? "success" : "default"} variant="outlined" sx={{ fontWeight: 900 }} />
-            </Stack>
+    <Stack spacing={1.5}>
+      <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", md: "center" }} spacing={1}>
+        <Box>
+          <Typography variant="subtitle1" sx={{ fontWeight: 950 }}>Device Driver Health</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Metriche normalizzate e policy di freschezza del driver {telemetry?.driver?.product_class || "CPE"}.
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          startIcon={refreshing ? <CircularProgress size={16} /> : <IconRefresh size={17} />}
+          onClick={refreshRuntime}
+          disabled={refreshing || !resolvedDeviceId}
+        >
+          Aggiorna dati runtime
+        </Button>
+      </Stack>
+
+      {error ? <Alert severity="error">{error}</Alert> : null}
+
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2,minmax(0,1fr))", xl: "repeat(5,minmax(0,1fr))" }, gap: 1.25 }}>
+        <MetricCard icon={IconActivityHeartbeat} label="Health score" value={health.score !== undefined ? `${health.score}/100` : "N/D"} helper={`Confidenza ${health.confidence || "N/D"}`} progress={health.score} tone={health.status === "GOOD" ? "success" : health.status === "WARNING" ? "warning" : "error"} />
+        <MetricCard icon={IconCpu} label="CPU" {...cpu} />
+        <MetricCard icon={IconDatabase} label="Memoria usata" {...memory} />
+        <MetricCard icon={IconClock} label="Uptime CPE" {...systemUptime} />
+        <MetricCard icon={IconPlugConnected} label="PPP" value={pppStatus.value} helper={pppUptime.value !== "N/D" ? `Uptime ${pppUptime.value} · ${pppUptime.helper}` : pppStatus.helper} tone={pppStatus.tone} />
+      </Box>
+
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "minmax(0,1.4fr) minmax(320px,.8fr)" }, gap: 1.5 }}>
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <IconServer size={19} />
+            <Typography variant="subtitle1" sx={{ fontWeight: 950 }}>Stato operativo normalizzato</Typography>
           </Stack>
-          {score !== null && <LinearProgress variant="determinate" value={clamp(score)} sx={{ mt: 2.5, height: 10, borderRadius: 999 }} />}
-        </CardContent>
-      </SoftCard>
+          <Divider sx={{ my: 1.25 }} />
+          <StatusRow label="Stato generale" value={health.status || "N/D"} state={health.status === "GOOD" ? "success" : health.status === "CRITICAL" ? "error" : "warning"} />
+          <Divider />
+          <StatusRow label="Rischio" value={health.risk_level || "N/D"} state={health.risk_level === "LOW" ? "success" : health.risk_level === "HIGH" ? "error" : "warning"} />
+          <Divider />
+          <StatusRow label="Confidenza Health" value={health.confidence || "N/D"} />
+          <Divider />
+          <StatusRow label="Metriche considerate" value={String((health.considered_metrics || []).length)} />
+          <Divider />
+          <StatusRow label="Metriche escluse" value={String((health.excluded_metrics || []).length)} />
+          <Divider />
+          <StatusRow label="Refresh richiesto" value={telemetry?.refresh?.required ? "SÌ" : "NO"} state={telemetry?.refresh?.required ? "warning" : "success"} />
+        </Paper>
 
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 1.5 }}>
-        <Metric label="CPU" value={cpu === null ? "N/D" : `${Math.round(cpu)}%`} progress={cpu} />
-        <Metric label="Memory" value={memory === null ? "N/D" : `${Math.round(memory)}%`} progress={memory} />
-        <Metric label="Storage" value={flash === null ? "N/D" : `${Math.round(flash)}%`} progress={flash} />
-        <Metric label="Uptime" value={uptimeLabel(uptime)} />
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <IconAlertTriangle size={19} />
+            <Typography variant="subtitle1" sx={{ fontWeight: 950 }}>Health Insight</Typography>
+          </Stack>
+          <Divider sx={{ my: 1.25 }} />
+          <Stack spacing={1}>
+            {insights.length ? insights.map((item, index) => (
+              <Alert key={`${item.severity}-${index}`} severity={item.severity} variant="outlined">
+                {item.text}
+              </Alert>
+            )) : <Alert severity="info" variant="outlined">Nessun insight disponibile.</Alert>}
+          </Stack>
+        </Paper>
       </Box>
-
-      <SoftCard>
-        <CardContent>
-          <Typography variant="h6" fontWeight={950}>Connettività</Typography>
-          <Typography variant="body2" sx={{ color: "#64748b", mt: .5 }}>Stato sintetico della connettivita WAN e PPP.</Typography>
-          <Divider sx={{ my: 2 }} />
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 1.5 }}>
-            <Metric label="WAN" value={overview?.online ? "Online" : "Offline"} helper={wanIp === "N/D" ? textValue(diagnostics?.wan_status, "Stato ACS") : `IP ${wanIp}`} />
-            <Metric
-              label="PPPoE"
-              value={pppStatus}
-              helper={pppLastError !== "N/D" && pppLastError !== "ERROR_NONE"
-                ? pppLastError
-                : pppInterfaceStatus !== "N/D"
-                  ? `Interfaccia ${pppInterfaceStatus}`
-                  : null}
-            />
-            <Metric label="Latency" value={latency === null ? "N/D" : `${Math.round(latency)} ms`} />
-            <Metric label="Packet Loss" value={packetLoss === null ? "N/D" : `${packetLoss}%`} helper={reconnects === null ? null : `${reconnects} reconnect`} />
-          </Box>
-        </CardContent>
-      </SoftCard>
-
-      <HealthPppSection diagnostics={diagnostics} />
-
-      <SoftCard>
-        <CardContent>
-          <Typography variant="h6" fontWeight={950}>Stabilità WiFi</Typography>
-          <Typography variant="body2" sx={{ color: "#64748b", mt: .5 }}>Qualita radio e utilizzo della rete locale.</Typography>
-          <Divider sx={{ my: 2 }} />
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4,1fr)" }, gap: 1.5 }}>
-            <Metric label="WiFi Score" value={wifiQuality?.score ?? "N/D"} progress={wifiQuality?.score} />
-            <Metric label="Rating" value={textValue(wifiQuality?.rating)} />
-            <Metric label="Client attivi" value={clients?.active_count ?? clients?.count ?? 0} />
-            <Metric label="Band Steering" value={firstText(diagnostics?.band_steering_status, wifiQuality?.band_steering_status)} />
-          </Box>
-        </CardContent>
-      </SoftCard>
-
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2 }}>
-        <SoftCard>
-          <CardContent>
-            <Typography variant="h6" fontWeight={950}>Evidenze</Typography>
-            <Typography variant="body2" sx={{ color: "#64748b", mt: .5, mb: 2 }}>Evidenze raccolte da ACS, diagnostica e WiFi analytics.</Typography>
-            <Stack spacing={1}>
-              {findings.length
-                ? findings.slice(0, 10).map((item, index) => <Finding key={`finding-${index}`} item={item} />)
-                : <Box sx={{ p: 2, borderRadius: 3, background: "#f8fafc" }}><Typography fontWeight={900} sx={{ color: "#059669" }}>OK Nessun finding critico disponibile</Typography></Box>}
-            </Stack>
-          </CardContent>
-        </SoftCard>
-
-        <SoftCard>
-          <CardContent>
-            <Typography variant="h6" fontWeight={950}>Raccomandazioni</Typography>
-            <Typography variant="body2" sx={{ color: "#64748b", mt: .5, mb: 2 }}>Azioni suggerite in base allo stato corrente del dispositivo.</Typography>
-            <Stack spacing={1}>
-              {recommendations.length
-                ? recommendations.slice(0, 10).map((item, index) => (
-                    <Box key={`recommendation-${index}`} sx={{ p: 1.5, borderRadius: 3, border: "1px solid rgba(37,99,235,.10)", background: "rgba(37,99,235,.05)" }}>
-                      <Typography fontWeight={900}>{typeof item === "string" ? item : textValue(item?.title || item?.name || item?.message)}</Typography>
-                      {typeof item === "object" && (item?.description || item?.detail) && (
-                        <Typography variant="body2" sx={{ color: "#64748b", mt: .25 }}>{textValue(item.description || item.detail)}</Typography>
-                      )}
-                    </Box>
-                  ))
-                : <Box sx={{ p: 2, borderRadius: 3, background: "#f8fafc" }}><Typography sx={{ color: "#64748b" }}>Nessuna raccomandazione disponibile.</Typography></Box>}
-            </Stack>
-          </CardContent>
-        </SoftCard>
-      </Box>
-    
-</Stack>
+    </Stack>
   );
 }

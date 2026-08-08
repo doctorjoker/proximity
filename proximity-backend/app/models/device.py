@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.sql import func
 
@@ -48,6 +48,47 @@ class Device(Base):
     site_address = Column(String(255))
 
     tenant_id = Column(String(64), index=True)
+
+
+class DeviceAcsIdentity(Base):
+    """A GenieACS identity observed for a stable physical CPE."""
+
+    __tablename__ = "device_acs_identities"
+    __table_args__ = (
+        UniqueConstraint("acs_device_id", name="uq_device_acs_identities_acs_device_id"),
+        Index("idx_device_acs_identities_device_id", "device_id"),
+        Index("idx_device_acs_identities_serial_number", "serial_number"),
+        Index("idx_device_acs_identities_last_seen", "last_seen"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    device_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("devices.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    acs_device_id = Column(Text, nullable=False)
+    serial_number = Column(String(128))
+    oui = Column(String(32))
+    manufacturer = Column(String(128))
+    product_class = Column(String(128))
+
+    software_version = Column(String(128))
+    hardware_version = Column(String(128))
+
+    first_seen = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    last_seen = Column(DateTime(timezone=True))
+    active = Column(Boolean, nullable=False, default=True, server_default="true")
+    raw_acs_payload = Column(JSONB)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
 
 class DeviceParameter(Base):

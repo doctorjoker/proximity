@@ -1,0 +1,17 @@
+{
+  "version": "EUREKA34.9.0",
+  "generated_at": "2026-08-01T13:35:56.749548+00:00",
+  "count": 1,
+  "items": [
+    {
+      "name": "tplink-xc220-g3v",
+      "path": "/devices/tplink-xc220-g3v.png",
+      "vendor": null,
+      "aliases": [
+        "tplink",
+        "xc220",
+        "g3v"
+      ]
+    }
+  ]
+}
