@@ -38,7 +38,7 @@ def _workflow_type_for_procedure(procedure_code: str) -> str:
 
 
 def _workflow_code_from_execution_code(execution_code: str) -> str:
-    return execution_code.replace("PEX-", "WF-")
+    return execution_code.replace("PEX-", "WFP-")
 
 
 def _runtime_phase() -> dict:
@@ -379,7 +379,7 @@ async def service_execute_procedure(code: str, version: str, payload):
             "execution_mode": failure["execution_mode"],
         }
 
-
+# EUREKA41.0.4c DIRECT AUTHORITATIVE READS
 def service_get_execution(execution_code: str):
     return get_execution(execution_code)
 

@@ -120,7 +120,7 @@ def list_workflow_steps(workflow_code: str) -> List[Dict[str, Any]]:
                 SELECT *
                 FROM workflow_steps
                 WHERE workflow_code = %s
-                ORDER BY started_at ASC NULLS LAST, created_at ASC
+                ORDER BY started_at ASC NULLS LAST, id ASC
                 """,
                 (workflow_code,),
             )

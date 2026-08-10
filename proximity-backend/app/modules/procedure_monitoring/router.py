@@ -12,18 +12,11 @@ from .service import (
 
 router = APIRouter(tags=["Procedure Monitoring"])
 
-
-@router.get("/api/v1/procedure-executions")
-def api_list_executions(limit: int = Query(default=100, ge=1, le=500)):
-    return {"success": True, "items": service_list_executions(limit)}
+# EUREKA41.0.5 ROUTE OWNERSHIP CLEANUP
 
 
-@router.get("/api/v1/procedure-executions/{execution_code}")
-def api_get_execution(execution_code: str):
-    item = service_get_execution(execution_code)
-    if not item:
-        raise HTTPException(status_code=404, detail="Procedure execution not found")
-    return {"success": True, "item": item}
+
+
 
 
 @router.get("/api/v1/procedure-executions/{execution_code}/timeline")

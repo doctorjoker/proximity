@@ -79,3 +79,41 @@ ROUTER_REPLACEMENT_HANDLERS = {
     "restore_customer_service_configuration": handle_restore_customer_service_configuration,
     "verify_customer_service": handle_verify_customer_service,
 }
+
+# EUREKA41.0.2 DEVICE REBOOT HANDLER
+async def handle_device_reboot(context: dict):
+    acs_device_id = (
+        context.get("acs_device_id")
+        or context.get("ACS_DEVICE_ID")
+        or context.get("new_acs_device_id")
+    )
+    if not acs_device_id:
+        return {
+            "success": False,
+            "state": "REBOOT_FAILED",
+            "reason": "MISSING_ACS_DEVICE_ID",
+        }
+
+    try:
+        from app.services.genieacs import GenieACSClient
+        client = GenieACSClient()
+        task = await client.create_task(
+            str(acs_device_id),
+            {"name": "reboot"},
+        )
+        context["state"] = "REBOOT_REQUESTED"
+        context["reboot_task"] = task
+        return {
+            "success": True,
+            "state": "REBOOT_REQUESTED",
+            "acs_device_id": str(acs_device_id),
+            "task": task,
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "state": "REBOOT_FAILED",
+            "acs_device_id": str(acs_device_id),
+            "reason": f"GENIEACS_REBOOT_FAILED: {exc}",
+        }
+

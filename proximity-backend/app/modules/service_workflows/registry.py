@@ -17,3 +17,8 @@ WORKFLOW_HANDLERS_REGISTRY = {
     "first_service_apply_configuration": handle_first_service_apply_configuration,
     "first_service_verify_service": handle_first_service_verify_service,
 }
+
+# EUREKA41.0.2 DEVICE REBOOT REGISTRY
+from app.modules.service_workflows.handlers import handle_device_reboot
+WORKFLOW_HANDLERS_REGISTRY["device_reboot"] = handle_device_reboot
+

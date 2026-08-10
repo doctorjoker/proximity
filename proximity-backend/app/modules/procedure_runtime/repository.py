@@ -153,35 +153,123 @@ def update_execution_scheduler_result(
 
             return cur.fetchone()
 
+# EUREKA41.0.4c AUTHORITATIVE EXECUTION READ
 def get_execution(execution_code: str):
     with get_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT *
-                FROM procedure_executions
-                WHERE execution_code = %s
-                   OR workflow_code = %s
+                SELECT
+                    pe.*,
+                    sw.status AS workflow_engine_status,
+                    sw.current_step,
+                    sw.progress,
+                    sw.started_at AS workflow_started_at,
+                    sw.completed_at AS workflow_completed_at,
+                    sw.error_code AS workflow_error_code,
+                    sw.error_message AS workflow_error_message
+                FROM procedure_executions pe
+                LEFT JOIN service_workflows sw
+                  ON sw.workflow_code = pe.workflow_code
+                WHERE pe.execution_code = %s
+                   OR pe.workflow_code = %s
                 """,
                 (execution_code, execution_code),
             )
-            return cur.fetchone()
+            row = cur.fetchone()
+            if not row:
+                return None
 
+            item = dict(row)
+            wf_status = str(item.get("workflow_engine_status") or "").upper()
 
+            if wf_status in {"COMPLETED", "FAILED", "CANCELLED"}:
+                if str(item.get("status") or "").upper() != wf_status:
+                    cur.execute(
+                        """
+                        UPDATE procedure_executions
+                        SET status = %s,
+                            updated_at = now()
+                        WHERE id = %s
+                        RETURNING status, updated_at
+                        """,
+                        (wf_status, item["id"]),
+                    )
+                    persisted = cur.fetchone()
+                    if persisted:
+                        item["status"] = persisted["status"]
+                        item["updated_at"] = persisted["updated_at"]
+
+            if item.get("started_at") and item.get("completed_at"):
+                try:
+                    seconds = (item["completed_at"] - item["started_at"]).total_seconds()
+                    item["duration_seconds"] = max(0, int(seconds))
+                except Exception:
+                    item["duration_seconds"] = None
+            else:
+                item["duration_seconds"] = None
+
+            return item
+
+# EUREKA41.0.4c AUTHORITATIVE EXECUTION LIST
 def list_executions(limit: int = 100):
     with get_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
                 """
-                SELECT *
-                FROM procedure_executions
-                ORDER BY requested_at DESC, id DESC
+                SELECT
+                    pe.*,
+                    sw.status AS workflow_engine_status,
+                    sw.current_step,
+                    sw.progress,
+                    sw.started_at AS workflow_started_at,
+                    sw.completed_at AS workflow_completed_at,
+                    sw.error_code AS workflow_error_code,
+                    sw.error_message AS workflow_error_message
+                FROM procedure_executions pe
+                LEFT JOIN service_workflows sw
+                  ON sw.workflow_code = pe.workflow_code
+                ORDER BY pe.requested_at DESC, pe.id DESC
                 LIMIT %s
                 """,
                 (limit,),
             )
-            return cur.fetchall()
+            rows = cur.fetchall()
+            result = []
 
+            for row in rows:
+                item = dict(row)
+                wf_status = str(item.get("workflow_engine_status") or "").upper()
+
+                if wf_status in {"COMPLETED", "FAILED", "CANCELLED"}:
+                    if str(item.get("status") or "").upper() != wf_status:
+                        cur.execute(
+                            """
+                            UPDATE procedure_executions
+                            SET status = %s,
+                                updated_at = now()
+                            WHERE id = %s
+                            RETURNING status, updated_at
+                            """,
+                            (wf_status, item["id"]),
+                        )
+                        persisted = cur.fetchone()
+                        if persisted:
+                            item["status"] = persisted["status"]
+                            item["updated_at"] = persisted["updated_at"]
+
+                if item.get("started_at") and item.get("completed_at"):
+                    try:
+                        seconds = (item["completed_at"] - item["started_at"]).total_seconds()
+                        item["duration_seconds"] = max(0, int(seconds))
+                    except Exception:
+                        item["duration_seconds"] = None
+                else:
+                    item["duration_seconds"] = None
+
+                result.append(item)
+
+            return result
 
 def create_runtime_workflow_record(
     *,
