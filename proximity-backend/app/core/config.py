@@ -5,6 +5,14 @@ class Settings(BaseSettings):
     app_name: str = "Proximity by NOVASpace"
     environment: str = "foundation"
 
+    # NOVASpace Identity / Keycloak
+    oidc_issuer: str = "https://ias.speednetwifi.it/realms/NOVASPACE"
+    oidc_discovery_url: str = (
+        "https://ias.speednetwifi.it/realms/NOVASPACE/"
+        ".well-known/openid-configuration"
+    )
+    oidc_client_id: str = "proximity"
+
     database_url: str = (
         "postgresql://proximity:proximity_db@127.0.0.1:5434/proximity_db"
     )

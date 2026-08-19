@@ -2,10 +2,12 @@ from contextlib import asynccontextmanager
 from app.modules.tr143_diagnostics.router import router as tr143_diagnostics_router
 from app.routers import device_diagnostics
 from app.modules.cpe_profiles.router import router as cpe_profiles_router
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
+from app.core.security import authenticate_request, identity_from_claims
 from app.services.acs_auto_sync import acs_auto_sync_service
 from app.routers.acs import router as acs_router
 
@@ -121,6 +123,37 @@ app = FastAPI(
     lifespan=proximity_lifespan,
 )
 
+
+@app.middleware("http")
+async def keycloak_authentication(request: Request, call_next):
+    path = request.url.path
+
+    # Public infrastructure endpoints.
+    if (
+        path == "/health"
+        or path == "/docs"
+        or path == "/openapi.json"
+        or path.startswith("/docs/")
+        or path.startswith("/redoc")
+    ):
+        return await call_next(request)
+
+    if path.startswith("/api/"):
+        try:
+            claims = authenticate_request(request)
+        except HTTPException as exc:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+                headers=exc.headers or {},
+            )
+
+        request.state.user = identity_from_claims(claims)
+        request.state.jwt_claims = claims
+
+    return await call_next(request)
+
+
 app.include_router(tr143_qualification_router)
 app.include_router(diagnostic_servers_router)
 
@@ -211,6 +244,16 @@ app.include_router(procedure_runtime_router)
 app.include_router(provisioning_profiles_router)
 
 app.include_router(cpe_profiles_router)
+
+
+
+@app.get("/api/v1/auth/me")
+async def authenticated_user(request: Request):
+    return {
+        "authenticated": True,
+        "user": request.state.user,
+    }
+
 
 @app.get("/health")
 async def health():
